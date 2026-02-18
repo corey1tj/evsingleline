@@ -11,9 +11,16 @@ export interface Breaker {
   circuitNumber: string;
   label: string;
   amps: string;
-  voltage: string;       // '120', '208', '240'
-  type: 'load' | 'subpanel';
+  voltage: string;       // '120', '208', '240', '277', '480'
+  type: 'load' | 'subpanel' | 'evcharger';
   subPanelId?: string;   // links to a MainPanel.id when type==='subpanel'
+  // EV charger fields (populated when type === 'evcharger')
+  chargerLevel?: string;
+  chargerAmps?: string;
+  wireRunFeet?: string;
+  wireSize?: string;
+  conduitType?: string;
+  installLocation?: string;
 }
 
 export interface MainPanel {
@@ -25,8 +32,8 @@ export interface MainPanel {
   mainBreakerAmps: string;
   busRatingAmps: string;
   totalSpaces: string;
-  parentPanelId?: string;   // if this panel is fed from a breaker on another panel
-  feedBreakerId?: string;   // the breaker id on the parent that feeds this panel
+  parentPanelId?: string;
+  feedBreakerId?: string;
   breakers: Breaker[];
 }
 
@@ -40,7 +47,7 @@ export interface EVChargerInfo {
   wireSize: string;
   conduitType: string;
   installLocation: string;
-  panelId: string;          // which panel this charger is connected to
+  panelId: string;
 }
 
 export interface SiteInfo {
@@ -63,19 +70,19 @@ export interface SingleLineData {
 
 // Helpers
 
-/** How many breaker spaces a given voltage occupies */
 export function breakerSpaces(voltage: string): number {
   switch (voltage) {
     case '208':
     case '240':
+    case '480':
       return 2;
     case '120':
+    case '277':
     default:
       return 1;
   }
 }
 
-/** Voltage options available for a given service voltage */
 export function voltageOptionsForService(serviceVoltage: string): { value: string; label: string }[] {
   switch (serviceVoltage) {
     case '120/208V':
@@ -97,14 +104,26 @@ export function voltageOptionsForService(serviceVoltage: string): { value: strin
   }
 }
 
-/** Calculate total breaker spaces used by a list of breakers */
 export function totalSpacesUsed(breakers: Breaker[]): number {
   return breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0);
 }
 
-/** Calculate kW from volts and amps */
 export function calcKw(voltage: string, amps: string): number {
   const v = Number(voltage) || 0;
   const a = Number(amps) || 0;
   return (v * a) / 1000;
 }
+
+/** Get the line-to-line voltage for a given charger level and service type */
+export function chargerVoltage(level: string, serviceVoltage: string): number {
+  if (level === 'Level 1') return 120;
+  switch (serviceVoltage) {
+    case '120/208V': return 208;
+    case '277/480V': return 480;
+    case '120/240V':
+    default: return 240;
+  }
+}
+
+/** Standard breaker sizes (amps) */
+export const STANDARD_BREAKER_SIZES = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400];

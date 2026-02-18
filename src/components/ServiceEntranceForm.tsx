@@ -5,10 +5,14 @@ interface Props {
   onChange: (data: ServiceEntrance) => void;
 }
 
+const COMMON_AMPS = ['100', '125', '150', '200', '225', '300', '400', '600', '800', '1000', '1200', '1600', '2000'];
+
 export function ServiceEntranceForm({ data, onChange }: Props) {
   const update = (field: keyof ServiceEntrance, value: string) => {
     onChange({ ...data, [field]: value });
   };
+
+  const isCustomAmps = data.serviceAmperage !== '' && !COMMON_AMPS.includes(data.serviceAmperage);
 
   return (
     <fieldset>
@@ -48,18 +52,31 @@ export function ServiceEntranceForm({ data, onChange }: Props) {
         <label>
           Service Amperage
           <select
-            value={data.serviceAmperage}
-            onChange={(e) => update('serviceAmperage', e.target.value)}
+            value={isCustomAmps ? '__custom__' : data.serviceAmperage}
+            onChange={(e) => {
+              if (e.target.value === '__custom__') {
+                update('serviceAmperage', data.serviceAmperage || '');
+              } else {
+                update('serviceAmperage', e.target.value);
+              }
+            }}
           >
             <option value="">Select...</option>
-            <option value="100">100A</option>
-            <option value="125">125A</option>
-            <option value="150">150A</option>
-            <option value="200">200A</option>
-            <option value="225">225A</option>
-            <option value="300">300A</option>
-            <option value="400">400A</option>
+            {COMMON_AMPS.map((a) => (
+              <option key={a} value={a}>{a}A</option>
+            ))}
+            <option value="__custom__">Custom...</option>
           </select>
+          {isCustomAmps && (
+            <input
+              type="number"
+              value={data.serviceAmperage}
+              onChange={(e) => update('serviceAmperage', e.target.value)}
+              placeholder="Enter amps"
+              min="0"
+              style={{ marginTop: '0.25rem' }}
+            />
+          )}
         </label>
         <label>
           Meter Number

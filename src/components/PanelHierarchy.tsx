@@ -1,5 +1,5 @@
 import type { MainPanel, Breaker } from '../types';
-import { breakerSpaces, totalSpacesUsed, voltageOptionsForService } from '../types';
+import { breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw, chargerVoltage, STANDARD_BREAKER_SIZES } from '../types';
 
 interface Props {
   panel: MainPanel;
@@ -10,6 +10,7 @@ interface Props {
   onUpdatePanel: (id: string, updated: MainPanel) => void;
   onRemovePanel: (id: string) => void;
   onAddBreaker: (panelId: string) => void;
+  onAddEvCharger: (panelId: string) => void;
   onUpdateBreaker: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemoveBreaker: (panelId: string, breakerId: string) => void;
   onAddSubPanel: (parentPanelId: string) => void;
@@ -35,6 +36,43 @@ const COMMON_LOADS = [
   'Other',
 ];
 
+const COMMON_PANEL_AMPS = ['100', '125', '150', '200', '225', '300', '400', '600', '800', '1000', '1200'];
+
+function AmpsSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const isCustom = value !== '' && !COMMON_PANEL_AMPS.includes(value);
+  return (
+    <label>
+      {label}
+      <select
+        value={isCustom ? '__custom__' : value}
+        onChange={(e) => {
+          if (e.target.value === '__custom__') {
+            onChange(value || '');
+          } else {
+            onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="">Select...</option>
+        {COMMON_PANEL_AMPS.map((a) => (
+          <option key={a} value={a}>{a}A</option>
+        ))}
+        <option value="__custom__">Custom...</option>
+      </select>
+      {isCustom && (
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter amps"
+          min="0"
+          style={{ marginTop: '0.25rem' }}
+        />
+      )}
+    </label>
+  );
+}
+
 export function PanelHierarchy({
   panel,
   index,
@@ -44,6 +82,7 @@ export function PanelHierarchy({
   onUpdatePanel,
   onRemovePanel,
   onAddBreaker,
+  onAddEvCharger,
   onUpdateBreaker,
   onRemoveBreaker,
   onAddSubPanel,
@@ -62,7 +101,7 @@ export function PanelHierarchy({
   const voltageOptions = voltageOptionsForService(serviceVoltage);
 
   const totalBreakerAmps = panel.breakers
-    .filter((b) => b.type === 'load')
+    .filter((b) => b.type === 'load' || b.type === 'evcharger')
     .reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
 
   const depthClass = depth > 0 ? 'panel-nested' : '';
@@ -81,7 +120,6 @@ export function PanelHierarchy({
           )}
         </legend>
 
-        {/* Panel info fields */}
         <div className="form-grid">
           <label>
             Panel Name
@@ -118,38 +156,16 @@ export function PanelHierarchy({
               onChange={(e) => updateField('panelModel', e.target.value)}
             />
           </label>
-          <label>
-            Main Breaker (Amps)
-            <select
-              value={panel.mainBreakerAmps}
-              onChange={(e) => updateField('mainBreakerAmps', e.target.value)}
-            >
-              <option value="">Select...</option>
-              <option value="100">100A</option>
-              <option value="125">125A</option>
-              <option value="150">150A</option>
-              <option value="200">200A</option>
-              <option value="225">225A</option>
-              <option value="300">300A</option>
-              <option value="400">400A</option>
-            </select>
-          </label>
-          <label>
-            Bus Rating (Amps)
-            <select
-              value={panel.busRatingAmps}
-              onChange={(e) => updateField('busRatingAmps', e.target.value)}
-            >
-              <option value="">Select...</option>
-              <option value="100">100A</option>
-              <option value="125">125A</option>
-              <option value="150">150A</option>
-              <option value="200">200A</option>
-              <option value="225">225A</option>
-              <option value="300">300A</option>
-              <option value="400">400A</option>
-            </select>
-          </label>
+          <AmpsSelect
+            label="Main Breaker (Amps)"
+            value={panel.mainBreakerAmps}
+            onChange={(v) => updateField('mainBreakerAmps', v)}
+          />
+          <AmpsSelect
+            label="Bus Rating (Amps)"
+            value={panel.busRatingAmps}
+            onChange={(v) => updateField('busRatingAmps', v)}
+          />
           <label>
             Total Spaces
             <input
@@ -170,7 +186,6 @@ export function PanelHierarchy({
           </label>
         </div>
 
-        {/* Breakers table */}
         <div className="breakers-section">
           <div className="breakers-header">
             <h4>Breakers</h4>
@@ -186,9 +201,9 @@ export function PanelHierarchy({
                 <tr>
                   <th>Ckt #</th>
                   <th>Label</th>
-                  <th>Amps</th>
+                  <th>Breaker</th>
                   <th>Voltage</th>
-                  <th>Spaces</th>
+                  <th>Sp</th>
                   <th>Type</th>
                   <th></th>
                 </tr>
@@ -199,6 +214,7 @@ export function PanelHierarchy({
                     key={breaker.id}
                     breaker={breaker}
                     panelId={panel.id}
+                    serviceVoltage={serviceVoltage}
                     voltageOptions={voltageOptions}
                     onUpdate={onUpdateBreaker}
                     onRemove={onRemoveBreaker}
@@ -211,6 +227,9 @@ export function PanelHierarchy({
           <div className="breakers-footer">
             <button type="button" className="btn-add btn-small" onClick={() => onAddBreaker(panel.id)}>
               + Add Breaker
+            </button>
+            <button type="button" className="btn-add btn-small btn-ev" onClick={() => onAddEvCharger(panel.id)}>
+              + Add EV Charger
             </button>
             <button type="button" className="btn-add btn-small btn-subpanel" onClick={() => onAddSubPanel(panel.id)}>
               + Add Sub Panel
@@ -225,7 +244,6 @@ export function PanelHierarchy({
         </div>
       </fieldset>
 
-      {/* Recursively render child sub-panels */}
       {childPanels.map((child, childIdx) => (
         <PanelHierarchy
           key={child.id}
@@ -237,6 +255,7 @@ export function PanelHierarchy({
           onUpdatePanel={onUpdatePanel}
           onRemovePanel={onRemovePanel}
           onAddBreaker={onAddBreaker}
+          onAddEvCharger={onAddEvCharger}
           onUpdateBreaker={onUpdateBreaker}
           onRemoveBreaker={onRemoveBreaker}
           onAddSubPanel={onAddSubPanel}
@@ -247,16 +266,17 @@ export function PanelHierarchy({
   );
 }
 
-// Individual breaker row component
 function BreakerRow({
   breaker,
   panelId,
+  serviceVoltage,
   voltageOptions,
   onUpdate,
   onRemove,
 }: {
   breaker: Breaker;
   panelId: string;
+  serviceVoltage: string;
   voltageOptions: { value: string; label: string }[];
   onUpdate: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemove: (panelId: string, breakerId: string) => void;
@@ -267,89 +287,202 @@ function BreakerRow({
 
   const spaces = breakerSpaces(breaker.voltage);
   const isSubPanel = breaker.type === 'subpanel';
+  const isEv = breaker.type === 'evcharger';
+
+  const evVoltage = isEv ? chargerVoltage(breaker.chargerLevel || '', serviceVoltage) : 0;
+  const evKw = isEv ? calcKw(String(evVoltage), breaker.chargerAmps || '') : 0;
 
   return (
-    <tr className={isSubPanel ? 'breaker-row-subpanel' : ''}>
-      <td>
-        <input
-          type="text"
-          value={breaker.circuitNumber}
-          onChange={(e) => update('circuitNumber', e.target.value)}
-          className="ckt-input"
-          placeholder="#"
-        />
-      </td>
-      <td>
-        {isSubPanel ? (
-          <span className="subpanel-label">{breaker.label || 'Sub Panel'}</span>
-        ) : (
+    <>
+      <tr className={isSubPanel ? 'breaker-row-subpanel' : isEv ? 'breaker-row-ev' : ''}>
+        <td>
+          <input
+            type="text"
+            value={breaker.circuitNumber}
+            onChange={(e) => update('circuitNumber', e.target.value)}
+            className="ckt-input"
+            placeholder="#"
+          />
+        </td>
+        <td>
+          {isSubPanel ? (
+            <span className="subpanel-label">{breaker.label || 'Sub Panel'}</span>
+          ) : isEv ? (
+            <input
+              type="text"
+              value={breaker.label}
+              onChange={(e) => update('label', e.target.value)}
+              placeholder="EV Charger label"
+              style={{ width: '100%' }}
+            />
+          ) : (
+            <>
+              <select
+                value={COMMON_LOADS.includes(breaker.label) ? breaker.label : (breaker.label ? 'Other' : '')}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  update('label', val === 'Other' ? '' : val);
+                }}
+              >
+                <option value="">Select...</option>
+                {COMMON_LOADS.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              {!COMMON_LOADS.includes(breaker.label) && (
+                <input
+                  type="text"
+                  placeholder="Describe..."
+                  value={breaker.label}
+                  onChange={(e) => update('label', e.target.value)}
+                  style={{ marginTop: '0.2rem', width: '100%' }}
+                />
+              )}
+            </>
+          )}
+        </td>
+        <td>
           <select
-            value={COMMON_LOADS.includes(breaker.label) ? breaker.label : (breaker.label ? 'Other' : '')}
-            onChange={(e) => {
-              const val = e.target.value;
-              update('label', val === 'Other' ? '' : val);
-            }}
+            value={STANDARD_BREAKER_SIZES.map(String).includes(breaker.amps) ? breaker.amps : ''}
+            onChange={(e) => update('amps', e.target.value)}
+            className="amps-select"
           >
-            <option value="">Select...</option>
-            {COMMON_LOADS.map((name) => (
-              <option key={name} value={name}>{name}</option>
+            <option value="">--</option>
+            {STANDARD_BREAKER_SIZES.map((s) => (
+              <option key={s} value={String(s)}>{s}A</option>
             ))}
           </select>
-        )}
-        {!isSubPanel && !COMMON_LOADS.includes(breaker.label) && breaker.label !== '' && (
-          <input
-            type="text"
-            placeholder="Describe..."
-            value={breaker.label}
-            onChange={(e) => update('label', e.target.value)}
-            style={{ marginTop: '0.2rem', width: '100%' }}
-          />
-        )}
-        {!isSubPanel && breaker.label === '' && (
-          <input
-            type="text"
-            placeholder="Describe..."
-            value=""
-            onChange={(e) => update('label', e.target.value)}
-            style={{ marginTop: '0.2rem', width: '100%' }}
-          />
-        )}
-      </td>
-      <td>
-        <input
-          type="number"
-          value={breaker.amps}
-          onChange={(e) => update('amps', e.target.value)}
-          min="0"
-          className="amps-input"
-          placeholder="A"
-        />
-      </td>
-      <td>
-        <select
-          value={breaker.voltage}
-          onChange={(e) => update('voltage', e.target.value)}
-        >
-          {voltageOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </td>
-      <td className="spaces-cell">
-        {spaces}
-      </td>
-      <td>
-        {isSubPanel ? (
-          <span className="type-badge type-subpanel">Sub Panel</span>
-        ) : (
-          <span className="type-badge type-load">Load</span>
-        )}
-      </td>
-      <td>
-        <button type="button" className="btn-remove btn-remove-sm" onClick={() => onRemove(panelId, breaker.id)}>
-          &times;
-        </button>
-      </td>
-    </tr>
+        </td>
+        <td>
+          <select
+            value={breaker.voltage}
+            onChange={(e) => update('voltage', e.target.value)}
+          >
+            {voltageOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </td>
+        <td className="spaces-cell">
+          {spaces}
+        </td>
+        <td>
+          {isSubPanel ? (
+            <span className="type-badge type-subpanel">Sub Panel</span>
+          ) : isEv ? (
+            <span className="type-badge type-ev">
+              EV{evKw > 0 ? ` ${evKw.toFixed(1)}kW` : ''}
+            </span>
+          ) : (
+            <span className="type-badge type-load">Load</span>
+          )}
+        </td>
+        <td>
+          <button type="button" className="btn-remove btn-remove-sm" onClick={() => onRemove(panelId, breaker.id)}>
+            &times;
+          </button>
+        </td>
+      </tr>
+      {/* EV charger detail row */}
+      {isEv && (
+        <tr className="breaker-row-ev-detail">
+          <td></td>
+          <td colSpan={6}>
+            <div className="ev-detail-grid">
+              <label>
+                Level
+                <select
+                  value={breaker.chargerLevel || ''}
+                  onChange={(e) => update('chargerLevel', e.target.value)}
+                >
+                  <option value="">Select...</option>
+                  <option value="Level 1">Level 1 (120V)</option>
+                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'})</option>
+                </select>
+              </label>
+              <label>
+                Charger Amps
+                <select
+                  value={breaker.chargerAmps || ''}
+                  onChange={(e) => update('chargerAmps', e.target.value)}
+                >
+                  <option value="">--</option>
+                  <option value="12">12A</option>
+                  <option value="16">16A</option>
+                  <option value="24">24A</option>
+                  <option value="32">32A</option>
+                  <option value="40">40A</option>
+                  <option value="48">48A</option>
+                  <option value="50">50A</option>
+                  <option value="60">60A</option>
+                  <option value="80">80A</option>
+                </select>
+              </label>
+              <label>
+                kW Output
+                <input
+                  type="text"
+                  value={evKw > 0 ? `${evKw.toFixed(1)} kW` : '--'}
+                  readOnly
+                  className="computed-field"
+                />
+              </label>
+              <label>
+                Wire Run (ft)
+                <input
+                  type="number"
+                  value={breaker.wireRunFeet || ''}
+                  onChange={(e) => update('wireRunFeet', e.target.value)}
+                  min="0"
+                />
+              </label>
+              <label>
+                Wire Size
+                <select
+                  value={breaker.wireSize || ''}
+                  onChange={(e) => update('wireSize', e.target.value)}
+                >
+                  <option value="">--</option>
+                  <option value="12 AWG">12 AWG</option>
+                  <option value="10 AWG">10 AWG</option>
+                  <option value="8 AWG">8 AWG</option>
+                  <option value="6 AWG">6 AWG</option>
+                  <option value="4 AWG">4 AWG</option>
+                  <option value="3 AWG">3 AWG</option>
+                  <option value="2 AWG">2 AWG</option>
+                  <option value="1 AWG">1 AWG</option>
+                  <option value="1/0 AWG">1/0 AWG</option>
+                  <option value="2/0 AWG">2/0 AWG</option>
+                </select>
+              </label>
+              <label>
+                Conduit
+                <select
+                  value={breaker.conduitType || ''}
+                  onChange={(e) => update('conduitType', e.target.value)}
+                >
+                  <option value="">--</option>
+                  <option value="EMT">EMT</option>
+                  <option value="PVC">PVC</option>
+                  <option value="Flex">Flex</option>
+                  <option value="MC Cable">MC Cable</option>
+                  <option value="NM-B">NM-B</option>
+                  <option value="Direct Burial">Direct Burial</option>
+                </select>
+              </label>
+              <label className="ev-detail-full">
+                Install Location
+                <input
+                  type="text"
+                  value={breaker.installLocation || ''}
+                  onChange={(e) => update('installLocation', e.target.value)}
+                  placeholder="e.g. Left wall of garage, 4ft from floor"
+                />
+              </label>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

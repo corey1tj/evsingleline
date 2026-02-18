@@ -2,16 +2,15 @@ import { useState } from 'react';
 import { SiteInfoForm } from './components/SiteInfoForm';
 import { ServiceEntranceForm } from './components/ServiceEntranceForm';
 import { PanelHierarchy } from './components/PanelHierarchy';
-import { EVChargerForm } from './components/EVChargerForm';
 import { LoadCalculation } from './components/LoadCalculation';
 import { ExportButton } from './components/ExportButton';
-import type { SingleLineData, MainPanel, EVChargerInfo, Breaker } from './types';
+import { SingleLineDiagram } from './components/SingleLineDiagram';
+import type { SingleLineData, MainPanel, Breaker } from './types';
 import './App.css';
 
 const STORAGE_KEY = 'evsingleline_data';
 
 let nextPanelId = 1;
-let nextChargerId = 1;
 let nextBreakerId = 1;
 
 function createPanel(overrides?: Partial<MainPanel>): MainPanel {
@@ -41,22 +40,6 @@ function createBreaker(overrides?: Partial<Breaker>): Breaker {
   };
 }
 
-function createCharger(overrides?: Partial<EVChargerInfo>): EVChargerInfo {
-  return {
-    id: String(nextChargerId++),
-    chargerLabel: '',
-    chargerLevel: '',
-    chargerAmps: '',
-    breakerSize: '',
-    wireRunFeet: '',
-    wireSize: '',
-    conduitType: '',
-    installLocation: '',
-    panelId: '',
-    ...overrides,
-  };
-}
-
 function syncIds(data: SingleLineData) {
   for (const p of data.panels) {
     const num = Number(p.id);
@@ -67,10 +50,6 @@ function syncIds(data: SingleLineData) {
         if (bnum >= nextBreakerId) nextBreakerId = bnum + 1;
       }
     }
-  }
-  for (const c of data.evChargers) {
-    const num = Number(c.id);
-    if (num >= nextChargerId) nextChargerId = num + 1;
   }
 }
 
@@ -83,7 +62,7 @@ function migrateData(parsed: any): SingleLineData {
   }
   // Migrate old single-charger format
   if (parsed.evCharger && !parsed.evChargers) {
-    parsed.evChargers = [{ ...parsed.evCharger, id: String(nextChargerId++), chargerLabel: 'EV Charger 1' }];
+    parsed.evChargers = [{ ...parsed.evCharger, id: 'legacy_1', chargerLabel: 'EV Charger 1' }];
     delete parsed.evCharger;
   }
   // Ensure panels have breakers array
@@ -108,18 +87,43 @@ function migrateData(parsed: any): SingleLineData {
     }
     delete parsed.existingLoads;
   }
-  // Ensure evChargers have panelId
-  if (parsed.evChargers) {
-    const firstPanelId = parsed.panels?.[0]?.id || '';
+  // Migrate old evChargers array into panel breakers
+  if (parsed.evChargers && parsed.evChargers.length > 0 && parsed.panels?.length > 0) {
     for (const c of parsed.evChargers) {
-      if (!c.panelId) c.panelId = firstPanelId;
+      const targetPanel = parsed.panels.find((p: any) => p.id === c.panelId) || parsed.panels[0];
+      let circNum = targetPanel.breakers.length + 1;
+      // Check if we already migrated (avoid duplicates on re-migrate)
+      const alreadyMigrated = targetPanel.breakers.some(
+        (b: any) => b.type === 'evcharger' && b.label === (c.chargerLabel || c.label)
+      );
+      if (!alreadyMigrated) {
+        targetPanel.breakers.push({
+          id: String(nextBreakerId++),
+          circuitNumber: String(circNum++),
+          label: c.chargerLabel || '',
+          amps: c.breakerSize || '',
+          voltage: '240',
+          type: 'evcharger',
+          chargerLevel: c.chargerLevel || '',
+          chargerAmps: c.chargerAmps || '',
+          wireRunFeet: c.wireRunFeet || '',
+          wireSize: c.wireSize || '',
+          conduitType: c.conduitType || '',
+          installLocation: c.installLocation || '',
+        });
+      }
     }
+    delete parsed.evChargers;
   }
   // Remove availableSpaces (now computed from breakers)
   if (parsed.panels) {
     for (const p of parsed.panels) {
       delete p.availableSpaces;
     }
+  }
+  // Ensure evChargers is empty array (all migrated into breakers)
+  if (!parsed.evChargers) {
+    parsed.evChargers = [];
   }
   return parsed as SingleLineData;
 }
@@ -156,7 +160,7 @@ function getInitialData(): SingleLineData {
       meterNumber: '',
     },
     panels: [mdp],
-    evChargers: [createCharger({ chargerLabel: 'EV Charger 1', panelId: mdp.id })],
+    evChargers: [],
   };
 }
 
@@ -181,7 +185,6 @@ function App() {
 
     let updatedPanels = [...data.panels, panel];
 
-    // If adding as a sub-panel, create a breaker on the parent that feeds it
     if (parentPanelId) {
       const feedBreaker = createBreaker({
         label: panel.panelName,
@@ -204,7 +207,6 @@ function App() {
   const removePanel = (id: string) => {
     if (data.panels.length <= 1) return;
 
-    // Collect all descendant panel ids
     const toRemove = new Set<string>();
     const collectDescendants = (panelId: string) => {
       toRemove.add(panelId);
@@ -216,7 +218,6 @@ function App() {
 
     const panel = data.panels.find((p) => p.id === id);
 
-    // Remove the feed breaker from parent
     let updatedPanels = data.panels.filter((p) => !toRemove.has(p.id));
     if (panel?.parentPanelId && panel?.feedBreakerId) {
       updatedPanels = updatedPanels.map((p) =>
@@ -226,19 +227,12 @@ function App() {
       );
     }
 
-    // Reassign any chargers on removed panels to first remaining panel
-    const firstRemainingId = updatedPanels[0]?.id || '';
-    const updatedChargers = data.evChargers.map((c) =>
-      toRemove.has(c.panelId) ? { ...c, panelId: firstRemainingId } : c
-    );
-
-    updateData({ panels: updatedPanels, evChargers: updatedChargers });
+    updateData({ panels: updatedPanels });
   };
 
   const updatePanel = (id: string, updated: MainPanel) => {
     let updatedPanels = data.panels.map((p) => (p.id === id ? updated : p));
 
-    // If panel name changed, also update the feed breaker label on parent
     if (updated.parentPanelId && updated.feedBreakerId) {
       updatedPanels = updatedPanels.map((p) =>
         p.id === updated.parentPanelId
@@ -267,6 +261,25 @@ function App() {
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };
 
+  const addEvCharger = (panelId: string) => {
+    const panel = data.panels.find((p) => p.id === panelId);
+    if (!panel) return;
+    const nextCircuit = panel.breakers.length > 0
+      ? String(Math.max(...panel.breakers.map((b) => Number(b.circuitNumber) || 0)) + 1)
+      : '1';
+    const evCount = data.panels.reduce(
+      (sum, p) => sum + p.breakers.filter((b) => b.type === 'evcharger').length,
+      0
+    );
+    const breaker = createBreaker({
+      circuitNumber: nextCircuit,
+      label: `EV Charger ${evCount + 1}`,
+      type: 'evcharger',
+      chargerLevel: 'Level 2',
+    });
+    updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
+  };
+
   const updateBreaker = (panelId: string, breakerId: string, updated: Breaker) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
@@ -281,10 +294,9 @@ function App() {
     if (!panel) return;
     const breaker = panel.breakers.find((b) => b.id === breakerId);
 
-    // If the breaker feeds a sub-panel, remove the sub-panel too
     if (breaker?.type === 'subpanel' && breaker.subPanelId) {
       removePanel(breaker.subPanelId);
-      return; // removePanel already removes the breaker
+      return;
     }
 
     updatePanel(panelId, {
@@ -293,38 +305,17 @@ function App() {
     });
   };
 
-  // ---- Charger CRUD ----
-
-  const addCharger = () => {
-    const charger = createCharger({
-      chargerLabel: `EV Charger ${data.evChargers.length + 1}`,
-      panelId: data.panels[0]?.id || '',
-    });
-    updateData({ evChargers: [...data.evChargers, charger] });
-  };
-
-  const removeCharger = (id: string) => {
-    if (data.evChargers.length <= 1) return;
-    updateData({ evChargers: data.evChargers.filter((c) => c.id !== id) });
-  };
-
-  const updateCharger = (id: string, updated: EVChargerInfo) => {
-    updateData({ evChargers: data.evChargers.map((c) => (c.id === id ? updated : c)) });
-  };
-
   // ---- Clear ----
 
   const handleClear = () => {
     if (window.confirm('Clear all form data? This cannot be undone.')) {
       localStorage.removeItem(STORAGE_KEY);
       nextPanelId = 1;
-      nextChargerId = 1;
       nextBreakerId = 1;
       setData(getInitialData());
     }
   };
 
-  // Build hierarchy: get root panels (no parent)
   const rootPanels = data.panels.filter((p) => !p.parentPanelId);
 
   return (
@@ -363,6 +354,7 @@ function App() {
               onUpdatePanel={updatePanel}
               onRemovePanel={removePanel}
               onAddBreaker={addBreaker}
+              onAddEvCharger={addEvCharger}
               onUpdateBreaker={updateBreaker}
               onRemoveBreaker={removeBreaker}
               onAddSubPanel={(parentId) => addPanel(parentId)}
@@ -371,28 +363,9 @@ function App() {
           ))}
         </section>
 
-        <section className="multi-section">
-          <div className="multi-section-header">
-            <h2>Proposed EV Chargers</h2>
-            <button type="button" className="btn-add" onClick={addCharger}>
-              + Add Charger
-            </button>
-          </div>
-          {data.evChargers.map((charger, idx) => (
-            <EVChargerForm
-              key={charger.id}
-              data={charger}
-              index={idx}
-              panels={data.panels}
-              serviceVoltage={data.serviceEntrance.serviceVoltage}
-              canRemove={data.evChargers.length > 1}
-              onChange={(updated) => updateCharger(charger.id, updated)}
-              onRemove={() => removeCharger(charger.id)}
-            />
-          ))}
-        </section>
-
         <LoadCalculation data={data} />
+
+        <SingleLineDiagram data={data} />
 
         <div className="actions">
           <ExportButton data={data} />

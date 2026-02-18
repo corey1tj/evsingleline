@@ -346,6 +346,97 @@ legend {
   color: #7c3aed;
 }
 
+.type-ev {
+  background: #d1fae5;
+  color: #047857;
+}
+
+/* EV charger button */
+.btn-ev {
+  background: #059669;
+}
+
+.btn-ev:hover {
+  background: #047857;
+}
+
+/* EV charger detail row */
+.breaker-row-ev {
+  background: #f0fdf4;
+}
+
+.breaker-row-ev-detail {
+  background: #f0fdf4;
+}
+
+.breaker-row-ev-detail td {
+  padding: 0.5rem 0.35rem;
+  border-bottom: 2px solid #d1fae5;
+}
+
+.ev-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.ev-detail-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.ev-detail-grid select,
+.ev-detail-grid input {
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  margin-top: 0.15rem;
+}
+
+.ev-detail-grid select:focus,
+.ev-detail-grid input:focus {
+  outline: none;
+  border-color: #059669;
+}
+
+.ev-detail-full {
+  grid-column: 1 / -1;
+}
+
+/* Amps select in breakers table */
+.amps-select {
+  width: 75px !important;
+}
+
+/* Diagram section */
+.diagram-section {
+  background: #f8fafc;
+  overflow: visible;
+}
+
+.diagram-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.diagram-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+}
+
+.diagram-container svg {
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+}
+
 /* Load calculation */
 .load-calc {
   background: #f8fafc;

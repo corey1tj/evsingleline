@@ -43,7 +43,11 @@ export function ServiceEntranceForm({ data, onChange }: Props) {
           Service Voltage
           <select
             value={data.serviceVoltage}
-            onChange={(e) => update('serviceVoltage', e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              const phase = v === '120/208V' || v === '277/480V' ? 'three' : v === '120/240V' ? 'single' : '';
+              onChange({ ...data, serviceVoltage: v, servicePhase: phase });
+            }}
           >
             <option value="">Select...</option>
             <option value="120/240V">120/240V Single Phase</option>
@@ -53,14 +57,12 @@ export function ServiceEntranceForm({ data, onChange }: Props) {
         </label>
         <label>
           Service Phase
-          <select
-            value={data.servicePhase}
-            onChange={(e) => update('servicePhase', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="single">Single Phase</option>
-            <option value="three">Three Phase</option>
-          </select>
+          <input
+            type="text"
+            value={data.servicePhase === 'three' ? 'Three Phase' : data.servicePhase === 'single' ? 'Single Phase' : '--'}
+            readOnly
+            className="computed-field"
+          />
         </label>
         <label>
           Service Amperage

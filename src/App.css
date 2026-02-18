@@ -264,6 +264,16 @@ legend {
   padding: 0.15rem 0.2rem !important;
 }
 
+.load-type-fixed {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #047857;
+  background: #d1fae5;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+}
+
 /* 2-pole circuit number input */
 .ckt-input-2p {
   width: 55px !important;

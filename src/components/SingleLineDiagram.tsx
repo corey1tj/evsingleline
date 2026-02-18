@@ -284,14 +284,18 @@ export function SingleLineDiagram({ data }: Props) {
               stroke={EV_STROKE} strokeWidth={1} />
           );
 
-          const v = chargerVoltage(col.b.chargerLevel || '', effectiveVoltage);
+          const v = chargerVoltage(col.b.chargerLevel || '', effectiveVoltage, col.b.chargerVolts);
           const kw = calcKw(String(v), col.b.chargerAmps || '');
+          const isDcfc = col.b.chargerLevel === 'Level 3';
+          const evBoxW = isDcfc ? 40 : 32;
 
           elements.push(
             <g key={`ev-sym-${col.b.id}`}>
-              <rect x={bCx - 16} y={evY} width={32} height={20} rx={4}
-                fill={EV_FILL} stroke={EV_STROKE} strokeWidth={1.5} />
-              <text x={bCx} y={evY + 13} textAnchor="middle" fontSize="9" fontWeight="bold" fill={EV_STROKE}>EV</text>
+              <rect x={bCx - evBoxW / 2} y={evY} width={evBoxW} height={20} rx={4}
+                fill={isDcfc ? '#fef3c7' : EV_FILL} stroke={isDcfc ? '#d97706' : EV_STROKE} strokeWidth={1.5} />
+              <text x={bCx} y={evY + 13} textAnchor="middle" fontSize="9" fontWeight="bold" fill={isDcfc ? '#92400e' : EV_STROKE}>
+                {isDcfc ? 'DCFC' : 'EV'}
+              </text>
               {kw > 0 && (
                 <text x={bCx} y={evY + 32} textAnchor="middle" style={{ font: FONT_LABEL }} fill="#047857">
                   {kw.toFixed(1)}kW
@@ -339,66 +343,79 @@ export function SingleLineDiagram({ data }: Props) {
 
         let nextY = breakerY + 4;
 
-        // -- Transformer symbol (two overlapping circles) --
+        // -- Transformer symbol (two separated circles with gap for clarity) --
         if (hasXfmr) {
           const xfmr = childPanel.transformer!;
-          const xfmrY = nextY + 10 + XFMR_R;
+          const xfmrGap = 8;  // vertical gap between the two coil circles
+          const xfmrTopY = nextY + 16 + XFMR_R;  // center of primary coil
+          const xfmrBotY = xfmrTopY + XFMR_R * 2 + xfmrGap;  // center of secondary coil
+          const xfmrMidY = (xfmrTopY + xfmrBotY) / 2;
           const kva = Number(xfmr.kva) || 0;
 
-          // Line from feed breaker to transformer
+          // Line from feed breaker to transformer primary
           elements.push(
-            <line key={`line-to-xfmr-${col.p.id}`} x1={spCx} y1={nextY} x2={spCx} y2={xfmrY - XFMR_R}
+            <line key={`line-to-xfmr-${col.p.id}`} x1={spCx} y1={nextY} x2={spCx} y2={xfmrTopY - XFMR_R}
               stroke={LINE_COLOR} strokeWidth={1.5} />
           );
 
           // Primary coil (top circle)
           elements.push(
-            <circle key={`xfmr-pri-${col.p.id}`} cx={spCx} cy={xfmrY - 3} r={XFMR_R}
+            <circle key={`xfmr-pri-${col.p.id}`} cx={spCx} cy={xfmrTopY} r={XFMR_R}
               fill={XFMR_FILL} stroke={XFMR_STROKE} strokeWidth={1.5} />
           );
-          // Secondary coil (bottom circle, overlapping)
+          // Secondary coil (bottom circle)
           elements.push(
-            <circle key={`xfmr-sec-${col.p.id}`} cx={spCx} cy={xfmrY + 3} r={XFMR_R}
+            <circle key={`xfmr-sec-${col.p.id}`} cx={spCx} cy={xfmrBotY} r={XFMR_R}
               fill={XFMR_FILL} stroke={XFMR_STROKE} strokeWidth={1.5} />
           );
 
-          // Primary voltage label
+          // Coupling lines between coils (magnetic coupling indicator)
           elements.push(
-            <text key={`xfmr-pri-lbl-${col.p.id}`} x={spCx} y={xfmrY - 6}
+            <g key={`xfmr-coupling-${col.p.id}`}>
+              <line x1={spCx - 2} y1={xfmrTopY + XFMR_R + 1} x2={spCx - 2} y2={xfmrBotY - XFMR_R - 1}
+                stroke={XFMR_STROKE} strokeWidth={1} />
+              <line x1={spCx + 2} y1={xfmrTopY + XFMR_R + 1} x2={spCx + 2} y2={xfmrBotY - XFMR_R - 1}
+                stroke={XFMR_STROKE} strokeWidth={1} />
+            </g>
+          );
+
+          // Primary voltage label (inside top circle)
+          elements.push(
+            <text key={`xfmr-pri-lbl-${col.p.id}`} x={spCx} y={xfmrTopY + 4}
               textAnchor="middle" style={{ font: FONT_SMALL }} fontWeight="600" fill="#92400e">
               {xfmr.primaryVoltage.replace('V', '')}
             </text>
           );
-          // Secondary voltage label
+          // Secondary voltage label (inside bottom circle)
           elements.push(
-            <text key={`xfmr-sec-lbl-${col.p.id}`} x={spCx} y={xfmrY + 8}
+            <text key={`xfmr-sec-lbl-${col.p.id}`} x={spCx} y={xfmrBotY + 4}
               textAnchor="middle" style={{ font: FONT_SMALL }} fontWeight="600" fill="#92400e">
               {xfmr.secondaryVoltage.replace('V', '')}
             </text>
           );
 
-          // kVA label to the right
+          // kVA and FLA labels to the right of the transformer
           if (kva > 0) {
             const primaryFLA = transformerFLA(kva, xfmr.primaryVoltage);
             const secondaryFLA = transformerFLA(kva, xfmr.secondaryVoltage);
             elements.push(
               <g key={`xfmr-kva-${col.p.id}`}>
-                <text x={spCx + XFMR_R + 4} y={xfmrY - 4}
-                  style={{ font: FONT_SMALL }} fill="#b45309">
-                  {kva}kVA
+                <text x={spCx + XFMR_R + 6} y={xfmrMidY - 3}
+                  style={{ font: FONT_SMALL }} fontWeight="600" fill="#b45309">
+                  {kva} kVA
                 </text>
-                <text x={spCx + XFMR_R + 4} y={xfmrY + 6}
+                <text x={spCx + XFMR_R + 6} y={xfmrMidY + 8}
                   style={{ font: FONT_SMALL }} fill="#92400e">
-                  {primaryFLA.toFixed(0)}A/{secondaryFLA.toFixed(0)}A
+                  {primaryFLA.toFixed(0)}A / {secondaryFLA.toFixed(0)}A
                 </text>
               </g>
             );
           }
 
-          // Line from transformer to sub-panel
-          nextY = xfmrY + XFMR_R + 6;
+          // Line from transformer secondary to sub-panel
+          nextY = xfmrBotY + XFMR_R + 10;
           elements.push(
-            <line key={`line-xfmr-sub-${col.p.id}`} x1={spCx} y1={xfmrY + XFMR_R - 1} x2={spCx} y2={nextY}
+            <line key={`line-xfmr-sub-${col.p.id}`} x1={spCx} y1={xfmrBotY + XFMR_R} x2={spCx} y2={nextY}
               stroke={LINE_COLOR} strokeWidth={1.5} />
           );
         } else {

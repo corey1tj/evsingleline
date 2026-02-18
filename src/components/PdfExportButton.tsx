@@ -218,9 +218,9 @@ export function PdfExportButton({ data }: Props) {
           if (b.type === 'subpanel') {
             typeLabel = 'Sub Panel';
           } else if (b.type === 'evcharger') {
-            const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage);
+            const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage, b.chargerVolts);
             const kw = calcKw(String(v), b.chargerAmps || '');
-            typeLabel = 'EV Charger';
+            typeLabel = b.chargerLevel === 'Level 3' ? 'DCFC' : 'EV Charger';
             extra = kw > 0 ? `${kw.toFixed(1)}kW` : '';
           }
 
@@ -299,7 +299,7 @@ export function PdfExportButton({ data }: Props) {
       const effV = panelForBreaker
         ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
         : serviceVoltage;
-      const v = chargerVoltage(b.chargerLevel || '', effV);
+      const v = chargerVoltage(b.chargerLevel || '', effV, b.chargerVolts);
       return sum + calcKw(String(v), b.chargerAmps || '');
     }, 0);
 

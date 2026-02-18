@@ -365,6 +365,12 @@ legend {
   color: #047857;
 }
 
+.type-dcfc {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+}
+
 /* EV charger button */
 .btn-ev {
   background: #059669;
@@ -520,6 +526,12 @@ legend {
   background: #fffbeb;
   color: #d97706;
   border: 1px solid #fde68a;
+}
+
+.calc-alert.info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
 }
 
 .calc-grid hr {

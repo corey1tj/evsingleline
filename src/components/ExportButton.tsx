@@ -40,9 +40,9 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
       if (b.type === 'subpanel') {
         lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]`);
       } else if (b.type === 'evcharger') {
-        const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage);
+        const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage, b.chargerVolts);
         const kw = calcKw(String(v), b.chargerAmps || '');
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER]`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]`);
         if (kw > 0) lines.push(`${indent}    kW Output: ${kw.toFixed(1)} kW (${v}V x ${b.chargerAmps}A)`);
         if (b.chargerLevel) lines.push(`${indent}    Level: ${b.chargerLevel}`);
         if (b.wireSize) lines.push(`${indent}    Wire: ${b.wireSize}, ${b.wireRunFeet || '?'} ft, ${b.conduitType || '?'}`);

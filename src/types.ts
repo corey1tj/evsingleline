@@ -7,6 +7,8 @@ export interface ServiceEntrance {
 }
 
 export interface MainPanel {
+  id: string;
+  panelName: string;
   panelLocation: string;
   panelMake: string;
   panelModel: string;
@@ -24,6 +26,8 @@ export interface ExistingLoad {
 }
 
 export interface EVChargerInfo {
+  id: string;
+  chargerLabel: string;
   chargerLevel: string;
   chargerAmps: string;
   breakerSize: string;
@@ -47,7 +51,7 @@ export interface SiteInfo {
 export interface SingleLineData {
   siteInfo: SiteInfo;
   serviceEntrance: ServiceEntrance;
-  mainPanel: MainPanel;
+  panels: MainPanel[];
   existingLoads: ExistingLoad[];
-  evCharger: EVChargerInfo;
+  evChargers: EVChargerInfo[];
 }

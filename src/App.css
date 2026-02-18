@@ -164,6 +164,44 @@ legend {
   background: #fef2f2;
 }
 
+/* Multi-section (panels, chargers) */
+.multi-section {
+  margin-bottom: 1.5rem;
+}
+
+.multi-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.multi-section-header h2 {
+  font-size: 1.1rem;
+  color: #1e40af;
+  margin: 0;
+  font-weight: 600;
+}
+
+.multi-item {
+  border-left: 3px solid #2563eb;
+}
+
+.legend-remove {
+  margin-left: 1rem;
+  vertical-align: middle;
+}
+
+.calc-row.sub {
+  padding-left: 1rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.calc-detail {
+  padding-left: 0.25rem;
+}
+
 /* Load calculation */
 .load-calc {
   background: #f8fafc;

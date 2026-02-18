@@ -32,14 +32,18 @@ function formatData(data: SingleLineData): string {
   lines.push(`Meter #: ${data.serviceEntrance.meterNumber}`);
   lines.push('');
 
-  lines.push('MAIN PANEL');
-  lines.push('-'.repeat(30));
-  lines.push(`Location: ${data.mainPanel.panelLocation}`);
-  lines.push(`Make/Model: ${data.mainPanel.panelMake} ${data.mainPanel.panelModel}`);
-  lines.push(`Main Breaker: ${data.mainPanel.mainBreakerAmps}A`);
-  lines.push(`Bus Rating: ${data.mainPanel.busRatingAmps}A`);
-  lines.push(`Spaces: ${data.mainPanel.availableSpaces} available of ${data.mainPanel.totalSpaces} total`);
-  lines.push('');
+  for (let i = 0; i < data.panels.length; i++) {
+    const panel = data.panels[i];
+    const label = panel.panelName || `Panel ${i + 1}`;
+    lines.push(label.toUpperCase());
+    lines.push('-'.repeat(30));
+    lines.push(`Location: ${panel.panelLocation}`);
+    lines.push(`Make/Model: ${panel.panelMake} ${panel.panelModel}`);
+    lines.push(`Main Breaker: ${panel.mainBreakerAmps}A`);
+    lines.push(`Bus Rating: ${panel.busRatingAmps}A`);
+    lines.push(`Spaces: ${panel.availableSpaces} available of ${panel.totalSpaces} total`);
+    lines.push('');
+  }
 
   if (data.existingLoads.length > 0) {
     lines.push('EXISTING LOADS');
@@ -52,15 +56,20 @@ function formatData(data: SingleLineData): string {
     lines.push('');
   }
 
-  lines.push('PROPOSED EV CHARGER');
-  lines.push('-'.repeat(30));
-  lines.push(`Level: ${data.evCharger.chargerLevel}`);
-  lines.push(`Charger Amps: ${data.evCharger.chargerAmps}A`);
-  lines.push(`Breaker Size: ${data.evCharger.breakerSize}A`);
-  lines.push(`Wire Run: ${data.evCharger.wireRunFeet} ft`);
-  lines.push(`Wire Size: ${data.evCharger.wireSize}`);
-  lines.push(`Conduit: ${data.evCharger.conduitType}`);
-  lines.push(`Install Location: ${data.evCharger.installLocation}`);
+  for (let i = 0; i < data.evChargers.length; i++) {
+    const charger = data.evChargers[i];
+    const label = charger.chargerLabel || `EV Charger ${i + 1}`;
+    lines.push(`PROPOSED ${label.toUpperCase()}`);
+    lines.push('-'.repeat(30));
+    lines.push(`Level: ${charger.chargerLevel}`);
+    lines.push(`Charger Amps: ${charger.chargerAmps}A`);
+    lines.push(`Breaker Size: ${charger.breakerSize}A`);
+    lines.push(`Wire Run: ${charger.wireRunFeet} ft`);
+    lines.push(`Wire Size: ${charger.wireSize}`);
+    lines.push(`Conduit: ${charger.conduitType}`);
+    lines.push(`Install Location: ${charger.installLocation}`);
+    lines.push('');
+  }
 
   return lines.join('\n');
 }

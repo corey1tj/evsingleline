@@ -2,18 +2,37 @@ import type { EVChargerInfo } from '../types';
 
 interface Props {
   data: EVChargerInfo;
+  index: number;
+  canRemove: boolean;
   onChange: (data: EVChargerInfo) => void;
+  onRemove: () => void;
 }
 
-export function EVChargerForm({ data, onChange }: Props) {
+export function EVChargerForm({ data, index, canRemove, onChange, onRemove }: Props) {
   const update = (field: keyof EVChargerInfo, value: string) => {
     onChange({ ...data, [field]: value });
   };
 
   return (
-    <fieldset>
-      <legend>Proposed EV Charger</legend>
+    <fieldset className="multi-item">
+      <legend>
+        {data.chargerLabel || `EV Charger ${index + 1}`}
+        {canRemove && (
+          <button type="button" className="btn-remove legend-remove" onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </legend>
       <div className="form-grid">
+        <label>
+          Charger Label
+          <input
+            type="text"
+            value={data.chargerLabel}
+            onChange={(e) => update('chargerLabel', e.target.value)}
+            placeholder="e.g. EV Charger 1, Garage EVSE"
+          />
+        </label>
         <label>
           Charger Level
           <select

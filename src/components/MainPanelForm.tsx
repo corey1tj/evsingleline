@@ -2,18 +2,37 @@ import type { MainPanel } from '../types';
 
 interface Props {
   data: MainPanel;
+  index: number;
+  canRemove: boolean;
   onChange: (data: MainPanel) => void;
+  onRemove: () => void;
 }
 
-export function MainPanelForm({ data, onChange }: Props) {
+export function MainPanelForm({ data, index, canRemove, onChange, onRemove }: Props) {
   const update = (field: keyof MainPanel, value: string) => {
     onChange({ ...data, [field]: value });
   };
 
   return (
-    <fieldset>
-      <legend>Main Panel</legend>
+    <fieldset className="multi-item">
+      <legend>
+        {data.panelName || `Panel ${index + 1}`}
+        {canRemove && (
+          <button type="button" className="btn-remove legend-remove" onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </legend>
       <div className="form-grid">
+        <label>
+          Panel Name
+          <input
+            type="text"
+            value={data.panelName}
+            onChange={(e) => update('panelName', e.target.value)}
+            placeholder="e.g. Main Panel, Sub Panel A"
+          />
+        </label>
         <label>
           Panel Location
           <input

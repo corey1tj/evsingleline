@@ -6,7 +6,10 @@ interface Props {
 
 export function LoadCalculation({ data }: Props) {
   const serviceAmps = Number(data.serviceEntrance.serviceAmperage) || 0;
-  const mainBreakerAmps = Number(data.mainPanel.mainBreakerAmps) || 0;
+
+  // Use the first panel as the "main" panel for overall capacity calculation
+  const firstPanel = data.panels[0];
+  const mainBreakerAmps = firstPanel ? Number(firstPanel.mainBreakerAmps) || 0 : 0;
   const panelRating = Math.min(serviceAmps, mainBreakerAmps) || serviceAmps || mainBreakerAmps;
 
   const existingLoadAmps = data.existingLoads.reduce(
@@ -14,15 +17,31 @@ export function LoadCalculation({ data }: Props) {
     0
   );
 
-  const evBreakerAmps = Number(data.evCharger.breakerSize) || 0;
-  const totalAfterEV = existingLoadAmps + evBreakerAmps;
+  const totalEvBreakerAmps = data.evChargers.reduce(
+    (sum, c) => sum + (Number(c.breakerSize) || 0),
+    0
+  );
+
+  const totalAfterEV = existingLoadAmps + totalEvBreakerAmps;
   const capacityUsed = panelRating > 0 ? Math.round((totalAfterEV / panelRating) * 100) : 0;
 
-  const availableSpaces = Number(data.mainPanel.availableSpaces) || 0;
-  const evSpacesNeeded = evBreakerAmps > 0 ? (Number(data.evCharger.breakerSize) > 30 ? 2 : 1) : 0;
-  const spacesOk = availableSpaces >= evSpacesNeeded;
+  const totalAvailableSpaces = data.panels.reduce(
+    (sum, p) => sum + (Number(p.availableSpaces) || 0),
+    0
+  );
 
-  if (panelRating === 0 && existingLoadAmps === 0 && evBreakerAmps === 0) {
+  const totalEvSpacesNeeded = data.evChargers.reduce(
+    (sum, c) => {
+      const breaker = Number(c.breakerSize) || 0;
+      if (breaker === 0) return sum;
+      return sum + (breaker > 30 ? 2 : 1);
+    },
+    0
+  );
+
+  const spacesOk = totalAvailableSpaces >= totalEvSpacesNeeded;
+
+  if (panelRating === 0 && existingLoadAmps === 0 && totalEvBreakerAmps === 0) {
     return null;
   }
 
@@ -31,7 +50,7 @@ export function LoadCalculation({ data }: Props) {
       <legend>Load Calculation Summary</legend>
       <div className="calc-grid">
         <div className="calc-row">
-          <span>Panel Rating</span>
+          <span>Panel Rating (Primary)</span>
           <span>{panelRating > 0 ? `${panelRating}A` : '--'}</span>
         </div>
         <div className="calc-row">
@@ -39,9 +58,23 @@ export function LoadCalculation({ data }: Props) {
           <span>{existingLoadAmps}A</span>
         </div>
         <div className="calc-row">
-          <span>Proposed EV Breaker</span>
-          <span>{evBreakerAmps > 0 ? `${evBreakerAmps}A` : '--'}</span>
+          <span>Proposed EV Breakers ({data.evChargers.length})</span>
+          <span>{totalEvBreakerAmps > 0 ? `${totalEvBreakerAmps}A` : '--'}</span>
         </div>
+        {data.evChargers.length > 1 && (
+          <div className="calc-detail">
+            {data.evChargers.map((c, i) => {
+              const amps = Number(c.breakerSize) || 0;
+              if (amps === 0) return null;
+              return (
+                <div key={c.id} className="calc-row sub">
+                  <span>{c.chargerLabel || `EV Charger ${i + 1}`}</span>
+                  <span>{amps}A</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <hr />
         <div className="calc-row total">
           <span>Total After EV</span>
@@ -65,12 +98,25 @@ export function LoadCalculation({ data }: Props) {
         )}
         <hr />
         <div className="calc-row">
-          <span>Available Panel Spaces</span>
-          <span>{availableSpaces}</span>
+          <span>Available Panel Spaces (All Panels)</span>
+          <span>{totalAvailableSpaces}</span>
         </div>
+        {data.panels.length > 1 && (
+          <div className="calc-detail">
+            {data.panels.map((p, i) => {
+              const spaces = Number(p.availableSpaces) || 0;
+              return (
+                <div key={p.id} className="calc-row sub">
+                  <span>{p.panelName || `Panel ${i + 1}`}</span>
+                  <span>{spaces} spaces</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div className="calc-row">
           <span>Spaces Needed for EV</span>
-          <span>{evSpacesNeeded}</span>
+          <span>{totalEvSpacesNeeded}</span>
         </div>
         <div className={`calc-row ${spacesOk ? 'ok' : 'warning'}`}>
           <span>Panel Space</span>

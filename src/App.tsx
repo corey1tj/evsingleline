@@ -6,7 +6,7 @@ import { LoadCalculation } from './components/LoadCalculation';
 import { ExportButton } from './components/ExportButton';
 import { SingleLineDiagram } from './components/SingleLineDiagram';
 import type { SingleLineData, MainPanel, Breaker } from './types';
-import { breakerSpaces } from './types';
+import { breakerSpaces, nextCircuitNumber } from './types';
 import './App.css';
 
 const STORAGE_KEY = 'evsingleline_data';
@@ -202,9 +202,12 @@ function App() {
     let updatedPanels = [...data.panels, panel];
 
     if (parentPanelId) {
+      const parentPanel = data.panels.find((p) => p.id === parentPanelId);
+      const feedCircuitNumber = parentPanel ? nextCircuitNumber(parentPanel.breakers, breakerSpaces('240')) : '';
       const feedBreaker = createBreaker({
         label: panel.panelName,
         type: 'subpanel',
+        circuitNumber: feedCircuitNumber,
         subPanelId: panel.id,
       });
       panel.feedBreakerId = feedBreaker.id;
@@ -270,10 +273,9 @@ function App() {
   const addBreaker = (panelId: string) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
-    const nextSpace = panel.breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0) + 1;
-    // Default voltage is 240V (2-pole), so format as "#,#"
+    // Default voltage is 240V (2-pole); use standard panel numbering (N,N+2)
     const defaultSpaces = breakerSpaces('240');
-    const circuitNumber = defaultSpaces > 1 ? `${nextSpace},${nextSpace + 1}` : String(nextSpace);
+    const circuitNumber = nextCircuitNumber(panel.breakers, defaultSpaces);
     const breaker = createBreaker({ circuitNumber });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };
@@ -281,13 +283,12 @@ function App() {
   const addEvCharger = (panelId: string) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
-    const nextSpace = panel.breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0) + 1;
     const evCount = data.panels.reduce(
       (sum, p) => sum + p.breakers.filter((b) => b.type === 'evcharger').length,
       0
     );
     const breaker = createBreaker({
-      circuitNumber: `${nextSpace},${nextSpace + 1}`,
+      circuitNumber: nextCircuitNumber(panel.breakers, 2),
       label: `EV Charger ${evCount + 1}`,
       type: 'evcharger',
       condition: 'new',

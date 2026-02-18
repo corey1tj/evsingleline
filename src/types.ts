@@ -160,6 +160,36 @@ export function nextBreakerSize(minAmps: number): number {
   return minAmps;  // beyond standard sizes
 }
 
+/** Get all occupied circuit positions from breakers */
+export function getOccupiedPositions(breakers: Breaker[]): Set<number> {
+  const occupied = new Set<number>();
+  for (const b of breakers) {
+    const nums = b.circuitNumber.split(',').map(s => Number(s.trim())).filter(n => n > 0);
+    for (const n of nums) {
+      occupied.add(n);
+    }
+  }
+  return occupied;
+}
+
+/** Calculate the next circuit number for a breaker based on occupied positions.
+ *  Standard panel numbering: odd numbers on left, even on right.
+ *  For 2-pole breakers, returns "N,N+2" (e.g. "1,3" or "2,4"). */
+export function nextCircuitNumber(breakers: Breaker[], spaces: number): string {
+  const occupied = getOccupiedPositions(breakers);
+
+  if (spaces === 1) {
+    let n = 1;
+    while (occupied.has(n)) n++;
+    return String(n);
+  }
+
+  // 2-pole: find N where both N and N+2 are available
+  let n = 1;
+  while (occupied.has(n) || occupied.has(n + 2)) n++;
+  return `${n},${n + 2}`;
+}
+
 /** Standard transformer kVA sizes */
 export const STANDARD_KVA_SIZES = [15, 25, 30, 37.5, 45, 50, 75, 100, 112.5, 150, 167, 200, 225, 250, 300, 500, 750, 1000];
 

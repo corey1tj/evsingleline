@@ -258,6 +258,18 @@ legend {
   padding: 0.15rem 0.25rem !important;
 }
 
+.load-type-select {
+  width: 75px !important;
+  font-size: 0.7rem !important;
+  padding: 0.15rem 0.2rem !important;
+}
+
+/* 2-pole circuit number input */
+.ckt-input-2p {
+  width: 55px !important;
+  text-align: center;
+}
+
 /* kW badge on charger legend */
 .kw-badge {
   display: inline-block;

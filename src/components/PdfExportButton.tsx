@@ -4,6 +4,7 @@ import type { SingleLineData, MainPanel } from '../types';
 import {
   breakerSpaces, totalSpacesUsed, calcKw,
   getEffectivePanelVoltage, transformerFLA,
+  necDemandAmps, evChargerKw,
 } from '../types';
 
 interface Props {
@@ -229,6 +230,8 @@ export function PdfExportButton({ data }: Props) {
             extra = parts.join(', ');
           }
 
+          const loadTypeLabel = b.type === 'subpanel' ? '--' : (b.loadType === 'continuous' ? 'Cont' : 'Non-C');
+
           return [
             b.circuitNumber || '--',
             b.label || '--',
@@ -236,6 +239,7 @@ export function PdfExportButton({ data }: Props) {
             `${b.voltage}V`,
             String(spaces),
             typeLabel,
+            loadTypeLabel,
             b.condition === 'new' ? 'NEW' : 'Existing',
             extra,
           ];
@@ -244,7 +248,7 @@ export function PdfExportButton({ data }: Props) {
         autoTable(doc, {
           startY: y,
           margin: { left: 14 + indent * 4 },
-          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'Status', 'Notes']],
+          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'Load', 'Status', 'Notes']],
           body: breakerRows,
           theme: 'striped',
           styles: {
@@ -262,13 +266,14 @@ export function PdfExportButton({ data }: Props) {
           },
           columnStyles: {
             0: { cellWidth: 12 },
-            1: { cellWidth: 36 },
-            2: { cellWidth: 16 },
-            3: { cellWidth: 16 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 14 },
+            3: { cellWidth: 14 },
             4: { cellWidth: 8 },
-            5: { cellWidth: 20 },
-            6: { cellWidth: 16 },
-            7: { cellWidth: 18 },
+            5: { cellWidth: 18 },
+            6: { cellWidth: 12 },
+            7: { cellWidth: 16 },
+            8: { cellWidth: 18 },
           },
         });
 
@@ -336,6 +341,30 @@ export function PdfExportButton({ data }: Props) {
       loadRows.push(['Capacity Used', `${capacityUsed}%`]);
     }
 
+    // NEC demand
+    const allNonSubBreakers = data.panels.flatMap((p) => p.breakers.filter((b) => b.type !== 'subpanel'));
+    const necDemand = necDemandAmps(allNonSubBreakers);
+    loadRows.push(['', '']);
+    loadRows.push(['NEC Demand Calculation', '']);
+    loadRows.push([`  Continuous (x1.25)`, `${necDemand.continuous}A x 1.25 = ${Math.ceil(necDemand.continuous * 1.25)}A`]);
+    loadRows.push([`  Non-Continuous (x1.0)`, `${necDemand.nonContinuous}A`]);
+    loadRows.push(['NEC Total Demand', `${necDemand.totalDemand}A`]);
+
+    // Peak kW
+    const peakKwLoads = allNonSubBreakers
+      .filter((b) => b.type !== 'evcharger')
+      .reduce((sum, b) => sum + ((Number(b.voltage) || 0) * (Number(b.amps) || 0)) / 1000, 0);
+    const peakKwEv = allEvBreakers.reduce((sum, b) => sum + evChargerKw(b), 0);
+    const totalPeakKw = peakKwLoads + peakKwEv;
+
+    loadRows.push(['', '']);
+    loadRows.push(['Peak kW Demand', '']);
+    loadRows.push(['  General Loads', `${peakKwLoads.toFixed(1)} kW`]);
+    if (allEvBreakers.length > 0) {
+      loadRows.push(['  EV Chargers (output)', `${peakKwEv.toFixed(1)} kW`]);
+    }
+    loadRows.push(['Total Peak Demand', `${totalPeakKw.toFixed(1)} kW`]);
+
     autoTable(doc, {
       startY: y,
       margin: { left: 14 },
@@ -350,21 +379,32 @@ export function PdfExportButton({ data }: Props) {
         1: { cellWidth: 50, halign: 'right' },
       },
       didParseCell: (hookData) => {
-        // Bold the total row
         const row = hookData.row.raw as string[];
-        if (row && row[0] === 'Total Load') {
+        if (!row) return;
+        const label = row[0];
+        // Bold total/summary rows
+        if (label === 'Total Load' || label === 'NEC Total Demand' || label === 'Total Peak Demand') {
           hookData.cell.styles.fontStyle = 'bold';
           hookData.cell.styles.fontSize = 10;
         }
+        // Bold section headers
+        if (label === 'NEC Demand Calculation' || label === 'Peak kW Demand') {
+          hookData.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.textColor = [30, 64, 175];
+        }
         // Red for capacity > 100%
-        if (row && row[0] === 'Capacity Used' && capacityUsed > 100) {
+        if (label === 'Capacity Used' && capacityUsed > 100) {
           hookData.cell.styles.textColor = [220, 38, 38];
           hookData.cell.styles.fontStyle = 'bold';
         }
         // Caution for 80-100%
-        if (row && row[0] === 'Capacity Used' && capacityUsed > 80 && capacityUsed <= 100) {
+        if (label === 'Capacity Used' && capacityUsed > 80 && capacityUsed <= 100) {
           hookData.cell.styles.textColor = [217, 119, 6];
           hookData.cell.styles.fontStyle = 'bold';
+        }
+        // Red for NEC demand exceeding service rating
+        if (label === 'NEC Total Demand' && panelRating > 0 && necDemand.totalDemand > panelRating) {
+          hookData.cell.styles.textColor = [220, 38, 38];
         }
       },
     });

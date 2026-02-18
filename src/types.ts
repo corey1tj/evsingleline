@@ -1,4 +1,5 @@
 export type Condition = 'existing' | 'new';
+export type LoadType = 'continuous' | 'noncontinuous';
 
 export interface ServiceEntrance {
   utilityProvider: string;
@@ -23,6 +24,7 @@ export interface Breaker {
   voltage: string;       // '120', '208', '240', '277', '480'
   type: 'load' | 'subpanel' | 'evcharger';
   condition: Condition;
+  loadType: LoadType;    // NEC continuous vs non-continuous classification
   subPanelId?: string;   // links to a MainPanel.id when type==='subpanel'
   // EV charger fields (populated when type === 'evcharger')
   chargerLevel?: string;
@@ -193,6 +195,50 @@ export function getEffectivePanelVoltage(panel: MainPanel, allPanels: MainPanel[
     if (parent) return getEffectivePanelVoltage(parent, allPanels, serviceVoltage);
   }
   return serviceVoltage;
+}
+
+/** Calculate peak kVA for a breaker */
+export function breakerKva(b: Breaker): number {
+  const v = Number(b.voltage) || 0;
+  const a = Number(b.amps) || 0;
+  return (v * a) / 1000;
+}
+
+/** Calculate peak kW for an EV charger breaker using charger output */
+export function evChargerKw(b: Breaker): number {
+  const v = Number(b.voltage) || 0;
+  const a = Number(b.chargerAmps) || 0;
+  return (v * a) / 1000;
+}
+
+/** NEC demand: continuous loads at 125%, non-continuous at 100% */
+export function necDemandAmps(breakers: Breaker[]): { continuous: number; nonContinuous: number; totalDemand: number } {
+  let continuous = 0;
+  let nonContinuous = 0;
+  for (const b of breakers) {
+    if (b.type === 'subpanel') continue;
+    const amps = Number(b.amps) || 0;
+    if (b.loadType === 'continuous') {
+      continuous += amps;
+    } else {
+      nonContinuous += amps;
+    }
+  }
+  // NEC 210.20(A) / 215.3: continuous loads × 1.25 + non-continuous × 1.0
+  const totalDemand = Math.ceil(continuous * 1.25) + nonContinuous;
+  return { continuous, nonContinuous, totalDemand };
+}
+
+/** Default NEC load type for common load labels */
+export function defaultLoadType(label: string, type: string): LoadType {
+  if (type === 'evcharger') return 'continuous';  // NEC 625.40
+  // Common continuous loads per NEC
+  const continuousLabels = ['lighting', 'electric furnace'];
+  const lower = label.toLowerCase();
+  for (const cl of continuousLabels) {
+    if (lower.includes(cl)) return 'continuous';
+  }
+  return 'noncontinuous';
 }
 
 /** Step-down voltage options available from a given parent voltage system */

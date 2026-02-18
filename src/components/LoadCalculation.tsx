@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize } from '../types';
+import { totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize, necDemandAmps, evChargerKw } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -84,6 +84,33 @@ export function LoadCalculation({ data }: Props) {
       xfSecondaryFLA,
       xfOverloaded,
     };
+  });
+
+  // NEC demand calculation (all panels combined)
+  const allNonSubBreakers = data.panels.flatMap((p) => p.breakers.filter((b) => b.type !== 'subpanel'));
+  const necDemand = necDemandAmps(allNonSubBreakers);
+
+  // Peak kW: for EV chargers use charger output, for other loads use breaker rating
+  const peakKwLoads = allNonSubBreakers.reduce((sum, b) => {
+    if (b.type === 'evcharger') return sum; // counted separately
+    const v = Number(b.voltage) || 0;
+    const a = Number(b.amps) || 0;
+    return sum + (v * a) / 1000;
+  }, 0);
+  const peakKwEv = allEvBreakers.reduce((sum, b) => sum + evChargerKw(b), 0);
+  const totalPeakKw = peakKwLoads + peakKwEv;
+
+  // Per-panel NEC demand
+  const panelNecDemands = data.panels.map((p) => {
+    const demand = necDemandAmps(p.breakers);
+    const pkw = p.breakers.reduce((sum, b) => {
+      if (b.type === 'subpanel') return sum;
+      if (b.type === 'evcharger') return sum + evChargerKw(b);
+      const v = Number(b.voltage) || 0;
+      const a = Number(b.amps) || 0;
+      return sum + (v * a) / 1000;
+    }, 0);
+    return { panel: p, ...demand, peakKw: pkw };
   });
 
   // Sub-panel alignment warnings
@@ -261,6 +288,73 @@ export function LoadCalculation({ data }: Props) {
         {capacityUsed > 80 && capacityUsed <= 100 && (
           <div className="calc-alert caution">
             Panel is above 80% capacity. Consider NEC load calculation to verify.
+          </div>
+        )}
+
+        <hr />
+
+        <div className="calc-row" style={{ fontWeight: 600 }}>
+          <span>NEC Demand Calculation</span>
+          <span></span>
+        </div>
+        <div className="calc-row sub">
+          <span>Continuous Loads (x 1.25)</span>
+          <span>{necDemand.continuous}A x 1.25 = {Math.ceil(necDemand.continuous * 1.25)}A</span>
+        </div>
+        <div className="calc-row sub">
+          <span>Non-Continuous Loads (x 1.0)</span>
+          <span>{necDemand.nonContinuous}A</span>
+        </div>
+        <div className={`calc-row total ${panelRating > 0 && necDemand.totalDemand > panelRating ? 'warning' : ''}`}>
+          <span>NEC Total Demand</span>
+          <span>{necDemand.totalDemand}A</span>
+        </div>
+        {panelRating > 0 && necDemand.totalDemand > panelRating && (
+          <div className="calc-alert warning">
+            NEC demand ({necDemand.totalDemand}A) exceeds service rating ({panelRating}A). Service upgrade may be required.
+          </div>
+        )}
+
+        {data.panels.length > 1 && (
+          <div className="calc-detail">
+            {panelNecDemands.map((pd) => (
+              <div key={pd.panel.id} className="calc-row sub">
+                <span>{pd.panel.panelName || 'Panel'}</span>
+                <span>{pd.continuous}A cont + {pd.nonContinuous}A non-cont = {pd.totalDemand}A demand</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <hr />
+
+        <div className="calc-row" style={{ fontWeight: 600 }}>
+          <span>Peak kW Demand</span>
+          <span></span>
+        </div>
+        <div className="calc-row sub">
+          <span>General Loads</span>
+          <span>{peakKwLoads.toFixed(1)} kW</span>
+        </div>
+        {allEvBreakers.length > 0 && (
+          <div className="calc-row sub">
+            <span>EV Chargers (charger output)</span>
+            <span>{peakKwEv.toFixed(1)} kW</span>
+          </div>
+        )}
+        <div className="calc-row total">
+          <span>Total Peak Demand</span>
+          <span>{totalPeakKw.toFixed(1)} kW</span>
+        </div>
+
+        {data.panels.length > 1 && (
+          <div className="calc-detail">
+            {panelNecDemands.filter((pd) => pd.peakKw > 0).map((pd) => (
+              <div key={pd.panel.id} className="calc-row sub">
+                <span>{pd.panel.panelName || 'Panel'}</span>
+                <span>{pd.peakKw.toFixed(1)} kW</span>
+              </div>
+            ))}
           </div>
         )}
 

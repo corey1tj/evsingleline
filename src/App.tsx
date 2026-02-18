@@ -38,6 +38,7 @@ function createBreaker(overrides?: Partial<Breaker>): Breaker {
     voltage: '240',
     type: 'load',
     condition: 'existing',
+    loadType: 'noncontinuous',
     ...overrides,
   };
 }
@@ -74,6 +75,7 @@ function migrateData(parsed: any): SingleLineData {
       if (!p.condition) p.condition = 'existing';
       for (const b of p.breakers) {
         if (!b.condition) b.condition = b.type === 'evcharger' ? 'new' : 'existing';
+        if (!b.loadType) b.loadType = b.type === 'evcharger' ? 'continuous' : 'noncontinuous';
       }
     }
   }
@@ -287,6 +289,7 @@ function App() {
       label: `EV Charger ${evCount + 1}`,
       type: 'evcharger',
       condition: 'new',
+      loadType: 'continuous',  // NEC 625.40
       chargerLevel: 'Level 2',
     });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });

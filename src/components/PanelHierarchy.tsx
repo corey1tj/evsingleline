@@ -361,6 +361,7 @@ export function PanelHierarchy({
                   <th>Voltage</th>
                   <th>Sp</th>
                   <th>Type</th>
+                  <th>Load</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -463,8 +464,8 @@ function BreakerRow({
             type="text"
             value={breaker.circuitNumber}
             onChange={(e) => update('circuitNumber', e.target.value)}
-            className="ckt-input"
-            placeholder="#"
+            className={spaces > 1 ? 'ckt-input-2p' : 'ckt-input'}
+            placeholder={spaces > 1 ? '#,#' : '#'}
           />
         </td>
         <td>
@@ -541,6 +542,18 @@ function BreakerRow({
           )}
         </td>
         <td>
+          {!isSubPanel && (
+            <select
+              value={breaker.loadType || 'noncontinuous'}
+              onChange={(e) => update('loadType', e.target.value)}
+              className="load-type-select"
+            >
+              <option value="noncontinuous">Non-Cont</option>
+              <option value="continuous">Cont</option>
+            </select>
+          )}
+        </td>
+        <td>
           <select
             value={breaker.condition || 'existing'}
             onChange={(e) => update('condition', e.target.value)}
@@ -560,7 +573,7 @@ function BreakerRow({
       {isEv && (
         <tr className="breaker-row-ev-detail">
           <td></td>
-          <td colSpan={7}>
+          <td colSpan={8}>
             <div className="ev-detail-grid">
               <label>
                 Level

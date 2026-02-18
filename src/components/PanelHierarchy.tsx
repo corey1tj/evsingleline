@@ -3,7 +3,7 @@ import {
   breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw,
   chargerVoltage, STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
   getEffectivePanelVoltage, stepDownOptions, transformerFLA,
-  minBreakerAmpsForEv, nextBreakerSize, breakerKva, evChargerKw,
+  minBreakerAmpsForEv, nextBreakerSize, breakerKva, evChargerKw, necDemandAmps,
 } from '../types';
 
 interface Props {
@@ -201,6 +201,11 @@ export function PanelHierarchy({
     if (b.type === 'evcharger') return sum + evChargerKw(b);
     return sum + breakerKva(b);
   }, 0);
+
+  // Spare capacity
+  const mainBreakerRating = Number(panel.mainBreakerAmps) || 0;
+  const panelDemand = necDemandAmps(panel.breakers);
+  const spareCapacityAmps = mainBreakerRating > 0 ? mainBreakerRating - panelDemand.totalDemand : 0;
 
   const depthClass = depth > 0 ? 'panel-nested' : '';
 
@@ -439,6 +444,7 @@ export function PanelHierarchy({
             <span className="breaker-summary">
               {totalBreakerAmps > 0 && `${totalBreakerAmps}A total load`}
               {totalPanelKw > 0 && ` / ${totalPanelKw.toFixed(1)} kW`}
+              {mainBreakerRating > 0 && ` | ${spareCapacityAmps}A spare`}
               {totalSp > 0 && ` | ${accountedSpaces}/${totalSp} spaces`}
             </span>
           </div>
@@ -618,7 +624,19 @@ function BreakerRow({
         <td>
           <select
             value={breaker.voltage}
-            onChange={(e) => update('voltage', e.target.value)}
+            onChange={(e) => {
+              const newVoltage = e.target.value;
+              const newSpaces = breakerSpaces(newVoltage);
+              const oldSpaces = breakerSpaces(breaker.voltage);
+              let circuitNumber = breaker.circuitNumber;
+              if (newSpaces !== oldSpaces) {
+                const baseNum = Number(breaker.circuitNumber.split(',')[0]) || 0;
+                if (baseNum > 0) {
+                  circuitNumber = newSpaces > 1 ? `${baseNum},${baseNum + 1}` : String(baseNum);
+                }
+              }
+              onUpdate(panelId, breaker.id, { ...breaker, voltage: newVoltage, circuitNumber });
+            }}
           >
             {voltageOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -646,7 +664,9 @@ function BreakerRow({
           }
         </td>
         <td>
-          {!isSubPanel && (
+          {isSubPanel ? null : isEv ? (
+            <span className="load-type-fixed" title="NEC 625.40: EV chargers are always continuous loads">Cont</span>
+          ) : (
             <select
               value={breaker.loadType || 'noncontinuous'}
               onChange={(e) => update('loadType', e.target.value)}

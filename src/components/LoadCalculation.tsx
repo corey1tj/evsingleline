@@ -365,6 +365,30 @@ export function LoadCalculation({ data }: Props) {
         <hr />
 
         <div className="calc-row" style={{ fontWeight: 600 }}>
+          <span>Spare Capacity by Panel</span>
+          <span></span>
+        </div>
+        {panelSummaries.map((ps, i) => {
+          const panelDemand = necDemandAmps(ps.panel.breakers);
+          const rating = ps.mainBreaker;
+          const spareAmps = rating > 0 ? rating - panelDemand.totalDemand : 0;
+          const sparePct = rating > 0 ? Math.round((spareAmps / rating) * 100) : 0;
+          const level = rating === 0 ? '' : spareAmps < 0 ? 'warning' : spareAmps < rating * 0.2 ? 'caution' : 'ok';
+          return (
+            <div key={ps.panel.id} className={`calc-row sub ${level}`}>
+              <span>{ps.panel.panelName || `Panel ${i + 1}`} ({rating > 0 ? `${rating}A` : 'no rating'})</span>
+              <span>
+                {rating > 0
+                  ? `${spareAmps}A spare (${sparePct}%) — ${panelDemand.totalDemand}A NEC demand`
+                  : `${panelDemand.totalDemand}A NEC demand`}
+              </span>
+            </div>
+          );
+        })}
+
+        <hr />
+
+        <div className="calc-row" style={{ fontWeight: 600 }}>
           <span>Panel Space Summary</span>
           <span></span>
         </div>

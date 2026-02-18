@@ -6,6 +6,7 @@ import { LoadCalculation } from './components/LoadCalculation';
 import { ExportButton } from './components/ExportButton';
 import { SingleLineDiagram } from './components/SingleLineDiagram';
 import type { SingleLineData, MainPanel, Breaker } from './types';
+import { breakerSpaces } from './types';
 import './App.css';
 
 const STORAGE_KEY = 'evsingleline_data';
@@ -269,25 +270,24 @@ function App() {
   const addBreaker = (panelId: string) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
-    const nextCircuit = panel.breakers.length > 0
-      ? String(Math.max(...panel.breakers.map((b) => Number(b.circuitNumber) || 0)) + 1)
-      : '1';
-    const breaker = createBreaker({ circuitNumber: nextCircuit });
+    const nextSpace = panel.breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0) + 1;
+    // Default voltage is 240V (2-pole), so format as "#,#"
+    const defaultSpaces = breakerSpaces('240');
+    const circuitNumber = defaultSpaces > 1 ? `${nextSpace},${nextSpace + 1}` : String(nextSpace);
+    const breaker = createBreaker({ circuitNumber });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };
 
   const addEvCharger = (panelId: string) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
-    const nextCircuit = panel.breakers.length > 0
-      ? String(Math.max(...panel.breakers.map((b) => Number(b.circuitNumber) || 0)) + 1)
-      : '1';
+    const nextSpace = panel.breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0) + 1;
     const evCount = data.panels.reduce(
       (sum, p) => sum + p.breakers.filter((b) => b.type === 'evcharger').length,
       0
     );
     const breaker = createBreaker({
-      circuitNumber: nextCircuit,
+      circuitNumber: `${nextSpace},${nextSpace + 1}`,
       label: `EV Charger ${evCount + 1}`,
       type: 'evcharger',
       condition: 'new',

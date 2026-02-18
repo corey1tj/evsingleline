@@ -1,5 +1,6 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { breakerSpaces, totalSpacesUsed, calcKw, chargerVoltage } from '../types';
+import { breakerSpaces, totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { PdfExportButton } from './PdfExportButton';
 
 interface Props {
   data: SingleLineData;
@@ -7,12 +8,25 @@ interface Props {
 
 function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, serviceVoltage: string, lines: string[]) {
   const label = panel.panelName || 'Panel';
-  lines.push(`${indent}${label.toUpperCase()}`);
+  const effectiveVoltage = getEffectivePanelVoltage(panel, allPanels, serviceVoltage);
+  const voltageNote = panel.transformer ? ` [${effectiveVoltage} via Transformer]` : '';
+
+  lines.push(`${indent}${label.toUpperCase()}${voltageNote}`);
   lines.push(`${indent}${'-'.repeat(30)}`);
   lines.push(`${indent}Location: ${panel.panelLocation}`);
   lines.push(`${indent}Make/Model: ${panel.panelMake} ${panel.panelModel}`);
   lines.push(`${indent}Main Breaker: ${panel.mainBreakerAmps}A`);
   lines.push(`${indent}Bus Rating: ${panel.busRatingAmps}A`);
+
+  // Transformer info
+  if (panel.transformer) {
+    const kva = Number(panel.transformer.kva) || 0;
+    const primaryFLA = transformerFLA(kva, panel.transformer.primaryVoltage);
+    const secondaryFLA = transformerFLA(kva, panel.transformer.secondaryVoltage);
+    lines.push(`${indent}Transformer: ${kva > 0 ? `${kva} kVA` : '--'}`);
+    lines.push(`${indent}  Primary: ${panel.transformer.primaryVoltage}${primaryFLA > 0 ? ` (${primaryFLA.toFixed(1)}A FLA)` : ''}`);
+    lines.push(`${indent}  Secondary: ${panel.transformer.secondaryVoltage}${secondaryFLA > 0 ? ` (${secondaryFLA.toFixed(1)}A FLA)` : ''}`);
+  }
 
   const totalSp = Number(panel.totalSpaces) || 0;
   const used = totalSpacesUsed(panel.breakers);
@@ -26,7 +40,7 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
       if (b.type === 'subpanel') {
         lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]`);
       } else if (b.type === 'evcharger') {
-        const v = chargerVoltage(b.chargerLevel || '', serviceVoltage);
+        const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage);
         const kw = calcKw(String(v), b.chargerAmps || '');
         lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER]`);
         if (kw > 0) lines.push(`${indent}    kW Output: ${kw.toFixed(1)} kW (${v}V x ${b.chargerAmps}A)`);
@@ -110,10 +124,11 @@ export function ExportButton({ data }: Props) {
 
   return (
     <div className="export-buttons">
+      <PdfExportButton data={data} />
       <button type="button" className="btn-export" onClick={handleExport}>
         Export as Text
       </button>
-      <button type="button" className="btn-export" onClick={handleExportJSON}>
+      <button type="button" className="btn-export btn-export-secondary" onClick={handleExportJSON}>
         Export as JSON
       </button>
     </div>

@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, calcKw, chargerVoltage } from '../types';
+import { totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -38,7 +38,11 @@ export function LoadCalculation({ data }: Props) {
   const existingLoadAmps = totalLoadAmps - totalEvBreakerAmps;
 
   const totalEvKw = allEvBreakers.reduce((sum, b) => {
-    const v = chargerVoltage(b.chargerLevel || '', serviceVoltage);
+    const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
+    const effVoltage = panelForBreaker
+      ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
+      : serviceVoltage;
+    const v = chargerVoltage(b.chargerLevel || '', effVoltage);
     return sum + calcKw(String(v), b.chargerAmps || '');
   }, 0);
 
@@ -56,6 +60,12 @@ export function LoadCalculation({ data }: Props) {
     const overloaded = mainBreaker > 0 && totalOnPanel > mainBreaker;
     const evBreakers = p.breakers.filter((b) => b.type === 'evcharger');
 
+    // Transformer info
+    const hasTransformer = !!p.transformer;
+    const xfKva = Number(p.transformer?.kva) || 0;
+    const xfSecondaryFLA = hasTransformer ? transformerFLA(xfKva, p.transformer!.secondaryVoltage) : 0;
+    const xfOverloaded = hasTransformer && xfKva > 0 && xfSecondaryFLA > 0 && totalOnPanel > xfSecondaryFLA;
+
     return {
       panel: p,
       totalSpaces: totalSp,
@@ -67,6 +77,10 @@ export function LoadCalculation({ data }: Props) {
       mainBreaker,
       overloaded,
       evBreakers,
+      hasTransformer,
+      xfKva,
+      xfSecondaryFLA,
+      xfOverloaded,
     };
   });
 
@@ -93,6 +107,30 @@ export function LoadCalculation({ data }: Props) {
         `${p.panelName || 'Sub Panel'}: Total load (${subTotal}A) exceeds feed breaker (${feedAmps}A) from ${parent.panelName || 'parent panel'}.`
       );
     }
+
+    // Transformer validation: feed breaker vs primary FLA
+    if (p.transformer && feedAmps > 0) {
+      const xfKva = Number(p.transformer.kva) || 0;
+      const primaryFLA = transformerFLA(xfKva, p.transformer.primaryVoltage);
+      if (primaryFLA > 0 && feedAmps < Math.ceil(primaryFLA * 0.8)) {
+        // Feed breaker is undersized for transformer draw — just informational
+      }
+      if (primaryFLA > 0 && feedAmps > 0 && feedAmps < Math.floor(primaryFLA)) {
+        alignmentWarnings.push(
+          `${p.panelName || 'Sub Panel'}: Feed breaker (${feedAmps}A) may be undersized for transformer primary FLA (${primaryFLA.toFixed(1)}A).`
+        );
+      }
+    }
+  }
+
+  // Transformer warnings
+  const transformerWarnings: string[] = [];
+  for (const ps of panelSummaries) {
+    if (ps.xfOverloaded) {
+      transformerWarnings.push(
+        `${ps.panel.panelName || 'Panel'}: Total load (${ps.totalOnPanel}A) exceeds transformer secondary capacity (${ps.xfSecondaryFLA.toFixed(1)}A from ${ps.xfKva}kVA).`
+      );
+    }
   }
 
   if (panelRating === 0 && totalLoadAmps === 0) {
@@ -114,12 +152,22 @@ export function LoadCalculation({ data }: Props) {
 
         {data.panels.length > 0 && (
           <div className="calc-detail">
-            {panelSummaries.map((ps, i) => (
-              <div key={ps.panel.id} className={`calc-row sub ${ps.overloaded ? 'warning' : ''}`}>
-                <span>{ps.panel.panelName || `Panel ${i + 1}`}</span>
-                <span>{ps.loadAmps}A{ps.subFeedAmps > 0 ? ` + ${ps.subFeedAmps}A feeds` : ''}</span>
-              </div>
-            ))}
+            {panelSummaries.map((ps, i) => {
+              const effV = getEffectivePanelVoltage(ps.panel, data.panels, serviceVoltage);
+              const voltageNote = ps.hasTransformer ? ` [${effV}]` : '';
+              return (
+                <div key={ps.panel.id} className={`calc-row sub ${ps.overloaded || ps.xfOverloaded ? 'warning' : ''}`}>
+                  <span>
+                    {ps.panel.panelName || `Panel ${i + 1}`}
+                    {voltageNote}
+                    {ps.hasTransformer && ps.xfKva > 0 && (
+                      <span className="calc-panel-tag"> ({ps.xfKva}kVA xfmr)</span>
+                    )}
+                  </span>
+                  <span>{ps.loadAmps}A{ps.subFeedAmps > 0 ? ` + ${ps.subFeedAmps}A feeds` : ''}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -131,9 +179,13 @@ export function LoadCalculation({ data }: Props) {
             </div>
             <div className="calc-detail">
               {allEvBreakers.map((b) => {
-                const v = chargerVoltage(b.chargerLevel || '', serviceVoltage);
+                const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
+                const effVoltage = panelForBreaker
+                  ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
+                  : serviceVoltage;
+                const v = chargerVoltage(b.chargerLevel || '', effVoltage);
                 const kw = calcKw(String(v), b.chargerAmps || '');
-                const panelName = data.panels.find((p) => p.breakers.some((br) => br.id === b.id))?.panelName || '';
+                const panelName = panelForBreaker?.panelName || '';
                 return (
                   <div key={b.id} className="calc-row sub">
                     <span>
@@ -200,11 +252,16 @@ export function LoadCalculation({ data }: Props) {
           );
         })}
 
-        {alignmentWarnings.length > 0 && (
+        {(alignmentWarnings.length > 0 || transformerWarnings.length > 0) && (
           <>
             <hr />
             {alignmentWarnings.map((w, i) => (
-              <div key={i} className="calc-alert warning">
+              <div key={`align-${i}`} className="calc-alert warning">
+                {w}
+              </div>
+            ))}
+            {transformerWarnings.map((w, i) => (
+              <div key={`xfmr-${i}`} className="calc-alert warning">
                 {w}
               </div>
             ))}

@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -133,6 +133,23 @@ export function LoadCalculation({ data }: Props) {
     }
   }
 
+  // NEC 625.40 – EV charger 125% breaker sizing warnings
+  const evBreakerWarnings: string[] = [];
+  for (const b of allEvBreakers) {
+    const cAmps = Number(b.chargerAmps) || 0;
+    const bAmps = Number(b.amps) || 0;
+    if (cAmps > 0 && bAmps > 0) {
+      const minAmps = minBreakerAmpsForEv(cAmps);
+      if (bAmps < minAmps) {
+        const suggested = nextBreakerSize(minAmps);
+        const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
+        evBreakerWarnings.push(
+          `${b.label || 'EV Charger'}${panelForBreaker ? ` (${panelForBreaker.panelName || 'Panel'})` : ''}: Breaker ${bAmps}A < 125% of ${cAmps}A charger (need ${'\u2265'} ${minAmps}A, use ${suggested}A).`
+        );
+      }
+    }
+  }
+
   if (panelRating === 0 && totalLoadAmps === 0) {
     return null;
   }
@@ -252,7 +269,7 @@ export function LoadCalculation({ data }: Props) {
           );
         })}
 
-        {(alignmentWarnings.length > 0 || transformerWarnings.length > 0) && (
+        {(alignmentWarnings.length > 0 || transformerWarnings.length > 0 || evBreakerWarnings.length > 0) && (
           <>
             <hr />
             {alignmentWarnings.map((w, i) => (
@@ -263,6 +280,11 @@ export function LoadCalculation({ data }: Props) {
             {transformerWarnings.map((w, i) => (
               <div key={`xfmr-${i}`} className="calc-alert warning">
                 {w}
+              </div>
+            ))}
+            {evBreakerWarnings.map((w, i) => (
+              <div key={`ev125-${i}`} className="calc-alert warning">
+                NEC 625.40: {w}
               </div>
             ))}
           </>

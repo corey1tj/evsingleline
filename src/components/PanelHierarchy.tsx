@@ -3,6 +3,7 @@ import {
   breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw,
   chargerVoltage, STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
   getEffectivePanelVoltage, stepDownOptions, transformerFLA,
+  minBreakerAmpsForEv, nextBreakerSize,
 } from '../types';
 
 interface Props {
@@ -637,6 +638,29 @@ function BreakerRow({
                 />
               </label>
             </div>
+            {/* NEC 625.40 – 125% continuous load breaker sizing */}
+            {(() => {
+              const cAmps = Number(breaker.chargerAmps) || 0;
+              const bAmps = Number(breaker.amps) || 0;
+              if (cAmps <= 0) return null;
+              const minAmps = minBreakerAmpsForEv(cAmps);
+              const suggested = nextBreakerSize(minAmps);
+              if (bAmps > 0 && bAmps < minAmps) {
+                return (
+                  <div className="calc-alert warning" style={{ marginTop: '0.4rem' }}>
+                    NEC 625.40: Breaker ({bAmps}A) must be {'\u2265'} 125% of charger amps ({cAmps}A = {minAmps}A min). Use {suggested}A breaker.
+                  </div>
+                );
+              }
+              if (bAmps === 0) {
+                return (
+                  <div className="calc-alert info" style={{ marginTop: '0.4rem' }}>
+                    NEC 625.40: {cAmps}A charger requires {'\u2265'} {minAmps}A breaker ({suggested}A recommended).
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </td>
         </tr>
       )}

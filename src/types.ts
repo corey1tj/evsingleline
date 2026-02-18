@@ -140,6 +140,19 @@ export function chargerVoltage(level: string, serviceVoltage: string, customVolt
 /** Standard breaker sizes (amps) */
 export const STANDARD_BREAKER_SIZES = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400];
 
+/** NEC 625.40 – minimum breaker amps for continuous EV load (125% of charger amps) */
+export function minBreakerAmpsForEv(chargerAmps: number): number {
+  return Math.ceil(chargerAmps * 1.25);
+}
+
+/** Next standard breaker size >= the given minimum amps */
+export function nextBreakerSize(minAmps: number): number {
+  for (const s of STANDARD_BREAKER_SIZES) {
+    if (s >= minAmps) return s;
+  }
+  return minAmps;  // beyond standard sizes
+}
+
 /** Standard transformer kVA sizes */
 export const STANDARD_KVA_SIZES = [15, 25, 30, 37.5, 45, 50, 75, 100, 112.5, 150, 167, 200, 225, 250, 300, 500, 750, 1000];
 

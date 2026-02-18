@@ -112,7 +112,7 @@ const LOAD_CATEGORIES: { category: string; loads: string[] }[] = [
 ];
 
 // Flat list of all load names (for validation checks)
-const COMMON_LOADS = LOAD_CATEGORIES.flatMap((c) => c.loads).concat(['Other']);
+const COMMON_LOADS = LOAD_CATEGORIES.flatMap((c) => c.loads).concat(['Spare', 'Other']);
 
 const COMMON_PANEL_AMPS = ['100', '125', '150', '200', '225', '300', '400', '600', '800', '1000', '1200'];
 
@@ -448,6 +448,11 @@ export function PanelHierarchy({
               {totalSp > 0 && ` | ${accountedSpaces}/${totalSp} spaces`}
             </span>
           </div>
+          {panel.breakers.length === 0 && (
+            <div className="calc-alert info" style={{ marginBottom: '0.5rem' }}>
+              Circuit numbering should start with 1. Two-pole breakers use N,N+2 (e.g. 1,3 or 2,4) following standard panel layout.
+            </div>
+          )}
 
           {panel.breakers.length > 0 && (
             <table className="breakers-table">
@@ -595,6 +600,7 @@ function BreakerRow({
                     ))}
                   </optgroup>
                 ))}
+                <option value="Spare">Spare</option>
                 <option value="Other">Other</option>
               </select>
               {!COMMON_LOADS.includes(breaker.label) && (
@@ -632,7 +638,7 @@ function BreakerRow({
               if (newSpaces !== oldSpaces) {
                 const baseNum = Number(breaker.circuitNumber.split(',')[0]) || 0;
                 if (baseNum > 0) {
-                  circuitNumber = newSpaces > 1 ? `${baseNum},${baseNum + 1}` : String(baseNum);
+                  circuitNumber = newSpaces > 1 ? `${baseNum},${baseNum + 2}` : String(baseNum);
                 }
               }
               onUpdate(panelId, breaker.id, { ...breaker, voltage: newVoltage, circuitNumber });

@@ -10,8 +10,9 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
   const label = panel.panelName || 'Panel';
   const effectiveVoltage = getEffectivePanelVoltage(panel, allPanels, serviceVoltage);
   const voltageNote = panel.transformer ? ` [${effectiveVoltage} via Transformer]` : '';
+  const conditionNote = panel.condition === 'new' ? ' [NEW]' : '';
 
-  lines.push(`${indent}${label.toUpperCase()}${voltageNote}`);
+  lines.push(`${indent}${label.toUpperCase()}${voltageNote}${conditionNote}`);
   lines.push(`${indent}${'-'.repeat(30)}`);
   lines.push(`${indent}Location: ${panel.panelLocation}`);
   lines.push(`${indent}Make/Model: ${panel.panelMake} ${panel.panelModel}`);
@@ -37,20 +38,21 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
     lines.push(`${indent}Breakers:`);
     for (const b of panel.breakers) {
       const spaces = breakerSpaces(b.voltage);
+      const cond = b.condition === 'new' ? ' [NEW]' : '';
       if (b.type === 'subpanel') {
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]${cond}`);
       } else if (b.type === 'evcharger') {
         const v = Number(b.voltage) || 0;
         const kw = calcKw(String(v), b.chargerAmps || '');
         const ports = Number(b.chargerPorts) || 0;
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]${cond}`);
         if (kw > 0) lines.push(`${indent}    kW Output: ${kw.toFixed(1)} kW (${v}V x ${b.chargerAmps}A)`);
         if (b.chargerLevel) lines.push(`${indent}    Level: ${b.chargerLevel}`);
         if (ports > 0) lines.push(`${indent}    Ports: ${ports}`);
         if (b.wireSize) lines.push(`${indent}    Wire: ${b.wireSize}, ${b.wireRunFeet || '?'} ft, ${b.conduitType || '?'}`);
         if (b.installLocation) lines.push(`${indent}    Location: ${b.installLocation}`);
       } else {
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)${cond}`);
       }
     }
   }
@@ -83,7 +85,7 @@ function formatData(data: SingleLineData): string {
   }
   lines.push('');
 
-  lines.push('SERVICE ENTRANCE');
+  lines.push(`SERVICE ENTRANCE${data.serviceEntrance.condition === 'new' ? ' [NEW]' : ''}`);
   lines.push('-'.repeat(30));
   lines.push(`Utility: ${data.serviceEntrance.utilityProvider}`);
   lines.push(`Voltage: ${data.serviceEntrance.serviceVoltage}`);

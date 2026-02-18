@@ -169,6 +169,7 @@ export function PanelHierarchy({
           {hasTransformer && (
             <span className="panel-badge panel-badge-xfmr">XFMR {effectiveVoltage}</span>
           )}
+          {panel.condition === 'new' && <span className="condition-badge condition-new">NEW</span>}
           {canRemove && (
             <button type="button" className="btn-remove legend-remove" onClick={() => onRemovePanel(panel.id)}>
               Remove
@@ -267,6 +268,16 @@ export function PanelHierarchy({
 
         <div className="form-grid">
           <label>
+            Status
+            <select
+              value={panel.condition || 'existing'}
+              onChange={(e) => updateField('condition', e.target.value)}
+            >
+              <option value="existing">Existing</option>
+              <option value="new">New / Proposed</option>
+            </select>
+          </label>
+          <label>
             Panel Name
             <input
               type="text"
@@ -326,7 +337,7 @@ export function PanelHierarchy({
               type="text"
               value={totalSp > 0 ? `${spacesUsed} used / ${availableSpaces} available` : '--'}
               readOnly
-              className="computed-field"
+              className={`computed-field${totalSp > 0 && spacesUsed !== totalSp ? ' spaces-mismatch' : ''}`}
             />
           </label>
         </div>
@@ -350,6 +361,7 @@ export function PanelHierarchy({
                   <th>Voltage</th>
                   <th>Sp</th>
                   <th>Type</th>
+                  <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -384,6 +396,11 @@ export function PanelHierarchy({
           {totalSp > 0 && availableSpaces < 0 && (
             <div className="calc-alert warning" style={{ marginTop: '0.5rem' }}>
               Panel exceeds available spaces by {Math.abs(availableSpaces)}.
+            </div>
+          )}
+          {totalSp > 0 && availableSpaces > 0 && (
+            <div className="calc-alert caution" style={{ marginTop: '0.5rem' }}>
+              {availableSpaces} space{availableSpaces > 1 ? 's' : ''} unaccounted for ({spacesUsed} of {totalSp} documented).
             </div>
           )}
         </div>
@@ -524,6 +541,16 @@ function BreakerRow({
           )}
         </td>
         <td>
+          <select
+            value={breaker.condition || 'existing'}
+            onChange={(e) => update('condition', e.target.value)}
+            className="condition-select"
+          >
+            <option value="existing">Existing</option>
+            <option value="new">New</option>
+          </select>
+        </td>
+        <td>
           <button type="button" className="btn-remove btn-remove-sm" onClick={() => onRemove(panelId, breaker.id)}>
             &times;
           </button>
@@ -533,7 +560,7 @@ function BreakerRow({
       {isEv && (
         <tr className="breaker-row-ev-detail">
           <td></td>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <div className="ev-detail-grid">
               <label>
                 Level

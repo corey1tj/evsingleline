@@ -37,6 +37,12 @@ export function LoadCalculation({ data }: Props) {
   const totalEvBreakerAmps = allEvBreakers.reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
   const existingLoadAmps = totalLoadAmps - totalEvBreakerAmps;
 
+  // Existing vs new breakdown
+  const allBreakers = data.panels.flatMap((p) => p.breakers.filter((b) => b.type !== 'subpanel'));
+  const existingBreakerAmps = allBreakers.filter((b) => b.condition !== 'new').reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
+  const newBreakerAmps = allBreakers.filter((b) => b.condition === 'new').reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
+  const hasNewItems = newBreakerAmps > 0 || data.panels.some((p) => p.condition === 'new');
+
   const totalEvKw = allEvBreakers.reduce((sum, b) => {
     const v = Number(b.voltage) || 0;
     return sum + calcKw(String(v), b.chargerAmps || '');
@@ -222,6 +228,20 @@ export function LoadCalculation({ data }: Props) {
           </div>
         )}
 
+        {hasNewItems && (
+          <>
+            <hr />
+            <div className="calc-row">
+              <span>Existing Load</span>
+              <span>{existingBreakerAmps}A</span>
+            </div>
+            <div className="calc-row">
+              <span>New / Proposed Load</span>
+              <span>{newBreakerAmps}A</span>
+            </div>
+          </>
+        )}
+
         <hr />
         <div className="calc-row total">
           <span>Total Load</span>
@@ -253,12 +273,14 @@ export function LoadCalculation({ data }: Props) {
         {panelSummaries.map((ps, i) => {
           if (ps.totalSpaces === 0) return null;
           const ok = ps.available >= 0;
+          const unaccounted = ps.available > 0;
           return (
-            <div key={ps.panel.id} className={`calc-row sub ${ok ? '' : 'warning'}`}>
+            <div key={ps.panel.id} className={`calc-row sub ${!ok ? 'warning' : unaccounted ? 'caution' : ''}`}>
               <span>{ps.panel.panelName || `Panel ${i + 1}`}</span>
               <span>
                 {ps.spacesUsed}/{ps.totalSpaces} used
-                {!ok ? ' - FULL' : ''}
+                {!ok ? ' - OVER' : ''}
+                {unaccounted ? ` - ${ps.available} unaccounted` : ''}
               </span>
             </div>
           );

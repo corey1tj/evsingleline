@@ -156,7 +156,8 @@ export function PdfExportButton({ data }: Props) {
       const isTransformerPanel = !!panel.transformer;
 
       y = checkNewPage(doc, y, 30);
-      y = addSectionTitle(doc, `${'\u00A0'.repeat(indent * 4)}${label}${isTransformerPanel ? ` [${effectiveVoltage} via Transformer]` : ''}`, y);
+      const condLabel = panel.condition === 'new' ? ' [NEW]' : '';
+      y = addSectionTitle(doc, `${'\u00A0'.repeat(indent * 4)}${label}${isTransformerPanel ? ` [${effectiveVoltage} via Transformer]` : ''}${condLabel}`, y);
 
       // Panel info row
       const infoItems = [
@@ -235,6 +236,7 @@ export function PdfExportButton({ data }: Props) {
             `${b.voltage}V`,
             String(spaces),
             typeLabel,
+            b.condition === 'new' ? 'NEW' : 'Existing',
             extra,
           ];
         });
@@ -242,7 +244,7 @@ export function PdfExportButton({ data }: Props) {
         autoTable(doc, {
           startY: y,
           margin: { left: 14 + indent * 4 },
-          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'Notes']],
+          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'Status', 'Notes']],
           body: breakerRows,
           theme: 'striped',
           styles: {
@@ -260,12 +262,13 @@ export function PdfExportButton({ data }: Props) {
           },
           columnStyles: {
             0: { cellWidth: 12 },
-            1: { cellWidth: 40 },
-            2: { cellWidth: 18 },
-            3: { cellWidth: 18 },
-            4: { cellWidth: 10 },
-            5: { cellWidth: 22 },
-            6: { cellWidth: 22 },
+            1: { cellWidth: 36 },
+            2: { cellWidth: 16 },
+            3: { cellWidth: 16 },
+            4: { cellWidth: 8 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 16 },
+            7: { cellWidth: 18 },
           },
         });
 

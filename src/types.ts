@@ -1,9 +1,12 @@
+export type Condition = 'existing' | 'new';
+
 export interface ServiceEntrance {
   utilityProvider: string;
   serviceVoltage: string;
   servicePhase: string;
   serviceAmperage: string;
   meterNumber: string;
+  condition: Condition;
 }
 
 export interface Transformer {
@@ -19,6 +22,7 @@ export interface Breaker {
   amps: string;
   voltage: string;       // '120', '208', '240', '277', '480'
   type: 'load' | 'subpanel' | 'evcharger';
+  condition: Condition;
   subPanelId?: string;   // links to a MainPanel.id when type==='subpanel'
   // EV charger fields (populated when type === 'evcharger')
   chargerLevel?: string;
@@ -39,6 +43,7 @@ export interface MainPanel {
   mainBreakerAmps: string;
   busRatingAmps: string;
   totalSpaces: string;
+  condition: Condition;
   parentPanelId?: string;
   feedBreakerId?: string;
   breakers: Breaker[];

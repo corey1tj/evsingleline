@@ -16,8 +16,21 @@ export function ServiceEntranceForm({ data, onChange }: Props) {
 
   return (
     <fieldset>
-      <legend>Service Entrance</legend>
+      <legend>
+        Service Entrance
+        {data.condition === 'new' && <span className="condition-badge condition-new">NEW</span>}
+      </legend>
       <div className="form-grid">
+        <label>
+          Status
+          <select
+            value={data.condition || 'existing'}
+            onChange={(e) => update('condition', e.target.value)}
+          >
+            <option value="existing">Existing</option>
+            <option value="new">New / Proposed</option>
+          </select>
+        </label>
         <label>
           Utility Provider
           <input

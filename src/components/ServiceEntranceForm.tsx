@@ -1,19 +1,43 @@
-import type { ServiceEntrance } from '../types';
+import type { ElectricalService } from '../types';
 
 interface Props {
-  data: ServiceEntrance;
-  onChange: (data: ServiceEntrance) => void;
+  data: ElectricalService;
+  canRemove: boolean;
+  onChange: (data: ElectricalService) => void;
+  onRemove: () => void;
 }
 
-export function ServiceEntranceForm({ data, onChange }: Props) {
-  const update = (field: keyof ServiceEntrance, value: string) => {
-    onChange({ ...data, [field]: value });
+export function ServiceEntranceForm({ data, canRemove, onChange, onRemove }: Props) {
+  const update = (field: keyof ElectricalService, value: string) => {
+    const next = { ...data, [field]: value };
+    // Auto-set phase when voltage is selected
+    if (field === 'serviceVoltage') {
+      if (value === '120/240V') next.servicePhase = 'single';
+      else if (value === '120/208V' || value === '277/480V') next.servicePhase = 'three';
+    }
+    onChange(next);
   };
 
   return (
-    <fieldset>
-      <legend>Service Entrance</legend>
+    <fieldset className="multi-item service-item">
+      <legend>
+        {data.serviceName || 'Service Entrance'}
+        {canRemove && (
+          <button type="button" className="btn-remove legend-remove" onClick={onRemove}>
+            Remove Service
+          </button>
+        )}
+      </legend>
       <div className="form-grid">
+        <label>
+          Service Name
+          <input
+            type="text"
+            value={data.serviceName}
+            onChange={(e) => update('serviceName', e.target.value)}
+            placeholder="e.g. Main Service, DCFC Service"
+          />
+        </label>
         <label>
           Utility Provider
           <input
@@ -59,6 +83,15 @@ export function ServiceEntranceForm({ data, onChange }: Props) {
             <option value="225">225A</option>
             <option value="300">300A</option>
             <option value="400">400A</option>
+            <option value="600">600A</option>
+            <option value="800">800A</option>
+            <option value="1000">1000A</option>
+            <option value="1200">1200A</option>
+            <option value="1600">1600A</option>
+            <option value="2000">2000A</option>
+            <option value="2500">2500A</option>
+            <option value="3000">3000A</option>
+            <option value="4000">4000A</option>
           </select>
         </label>
         <label>

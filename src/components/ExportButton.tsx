@@ -1,4 +1,5 @@
-import type { SingleLineData } from '../types';
+import type { SingleLineData, Panel } from '../types';
+import { minBreakerForContinuousLoad } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -8,11 +9,12 @@ function formatData(data: SingleLineData): string {
   const lines: string[] = [];
 
   lines.push('EV CHARGER INSTALLATION - ELECTRICAL ONE-LINE SURVEY');
-  lines.push('='.repeat(55));
+  lines.push('='.repeat(60));
   lines.push('');
 
+  // Site info
   lines.push('SITE INFORMATION');
-  lines.push('-'.repeat(30));
+  lines.push('-'.repeat(40));
   lines.push(`Customer: ${data.siteInfo.customerName}`);
   lines.push(`Address: ${data.siteInfo.address}`);
   lines.push(`City/State/ZIP: ${data.siteInfo.city}, ${data.siteInfo.state} ${data.siteInfo.zip}`);
@@ -23,52 +25,82 @@ function formatData(data: SingleLineData): string {
   }
   lines.push('');
 
-  lines.push('SERVICE ENTRANCE');
-  lines.push('-'.repeat(30));
-  lines.push(`Utility: ${data.serviceEntrance.utilityProvider}`);
-  lines.push(`Voltage: ${data.serviceEntrance.serviceVoltage}`);
-  lines.push(`Phase: ${data.serviceEntrance.servicePhase}`);
-  lines.push(`Service Amps: ${data.serviceEntrance.serviceAmperage}A`);
-  lines.push(`Meter #: ${data.serviceEntrance.meterNumber}`);
-  lines.push('');
-
-  for (let i = 0; i < data.panels.length; i++) {
-    const panel = data.panels[i];
-    const label = panel.panelName || `Panel ${i + 1}`;
-    lines.push(label.toUpperCase());
-    lines.push('-'.repeat(30));
-    lines.push(`Location: ${panel.panelLocation}`);
-    lines.push(`Make/Model: ${panel.panelMake} ${panel.panelModel}`);
-    lines.push(`Main Breaker: ${panel.mainBreakerAmps}A`);
-    lines.push(`Bus Rating: ${panel.busRatingAmps}A`);
-    lines.push(`Spaces: ${panel.availableSpaces} available of ${panel.totalSpaces} total`);
+  // Per-service hierarchy
+  for (const svc of data.services) {
+    lines.push(`SERVICE: ${svc.serviceName || 'Unnamed Service'}`);
+    lines.push('='.repeat(40));
+    lines.push(`  Utility: ${svc.utilityProvider}`);
+    lines.push(`  Voltage: ${svc.serviceVoltage}`);
+    lines.push(`  Phase: ${svc.servicePhase === 'three' ? 'Three Phase' : svc.servicePhase === 'single' ? 'Single Phase' : svc.servicePhase}`);
+    lines.push(`  Service Amps: ${svc.serviceAmperage}A`);
+    lines.push(`  Meter #: ${svc.meterNumber}`);
     lines.push('');
-  }
 
-  if (data.existingLoads.length > 0) {
-    lines.push('EXISTING LOADS');
-    lines.push('-'.repeat(30));
-    for (const load of data.existingLoads) {
-      lines.push(`  ${load.name}: ${load.breakerAmps}A @ ${load.voltage}V`);
+    // Recursive panel output
+    const printPanel = (panel: Panel, indent: string) => {
+      const isMdp = panel.parentId === '';
+      const prefix = isMdp ? 'MDP' : 'SUB-PANEL';
+      lines.push(`${indent}${prefix}: ${panel.panelName || '(unnamed)'}`);
+      lines.push(`${indent}${'─'.repeat(35)}`);
+      lines.push(`${indent}  Location: ${panel.panelLocation}`);
+      lines.push(`${indent}  Make/Model: ${panel.panelMake} ${panel.panelModel}`);
+      lines.push(`${indent}  Bus Voltage: ${panel.busVoltage}V`);
+      lines.push(`${indent}  Main Breaker: ${panel.mainBreakerAmps}A`);
+      lines.push(`${indent}  Bus Rating: ${panel.busRatingAmps}A`);
+      lines.push(`${indent}  Spaces: ${panel.availableSpaces} available / ${panel.totalSpaces} total`);
+      if (panel.feedBreakerAmps) {
+        lines.push(`${indent}  Feed Breaker: ${panel.feedBreakerAmps}A`);
+      }
+
+      // Chargers in this panel
+      const panelChargers = data.evChargers.filter((c) => c.panelId === panel.id);
+      if (panelChargers.length > 0) {
+        lines.push('');
+        for (const charger of panelChargers) {
+          const label = charger.chargerLabel || 'EV Charger';
+          lines.push(`${indent}  CHARGER: ${label}`);
+          lines.push(`${indent}    Level: ${charger.chargerLevel}`);
+          lines.push(`${indent}    Voltage: ${charger.chargerVoltage}V`);
+          lines.push(`${indent}    Charger Amps: ${charger.chargerAmps}A (continuous)`);
+          lines.push(`${indent}    Breaker Size: ${charger.breakerSize}A`);
+          const cAmps = Number(charger.chargerAmps) || 0;
+          if (cAmps > 0) {
+            const minB = minBreakerForContinuousLoad(cAmps);
+            lines.push(`${indent}    80% Rule Min Breaker: ${minB}A`);
+          }
+          lines.push(`${indent}    Wire Run: ${charger.wireRunFeet} ft`);
+          lines.push(`${indent}    Wire Size: ${charger.wireSize}`);
+          lines.push(`${indent}    Conduit: ${charger.conduitType}`);
+          lines.push(`${indent}    Install Location: ${charger.installLocation}`);
+        }
+      }
+
+      // Existing loads in this panel
+      const panelLoads = data.existingLoads.filter((l) => l.panelId === panel.id);
+      if (panelLoads.length > 0) {
+        lines.push('');
+        lines.push(`${indent}  EXISTING LOADS:`);
+        for (const load of panelLoads) {
+          lines.push(`${indent}    ${load.name}: ${load.breakerAmps}A @ ${load.voltage}V`);
+        }
+        const totalAmps = panelLoads.reduce((s, l) => s + (Number(l.breakerAmps) || 0), 0);
+        lines.push(`${indent}    TOTAL: ${totalAmps}A`);
+      }
+
+      lines.push('');
+
+      // Child panels
+      const children = data.panels.filter((p) => p.parentId === panel.id);
+      for (const child of children) {
+        printPanel(child, indent + '    ');
+      }
+    };
+
+    // Find MDP for this service
+    const mdp = data.panels.find((p) => p.serviceId === svc.id && p.parentId === '');
+    if (mdp) {
+      printPanel(mdp, '  ');
     }
-    const totalAmps = data.existingLoads.reduce((s, l) => s + (Number(l.breakerAmps) || 0), 0);
-    lines.push(`  TOTAL: ${totalAmps}A`);
-    lines.push('');
-  }
-
-  for (let i = 0; i < data.evChargers.length; i++) {
-    const charger = data.evChargers[i];
-    const label = charger.chargerLabel || `EV Charger ${i + 1}`;
-    lines.push(`PROPOSED ${label.toUpperCase()}`);
-    lines.push('-'.repeat(30));
-    lines.push(`Level: ${charger.chargerLevel}`);
-    lines.push(`Charger Amps: ${charger.chargerAmps}A`);
-    lines.push(`Breaker Size: ${charger.breakerSize}A`);
-    lines.push(`Wire Run: ${charger.wireRunFeet} ft`);
-    lines.push(`Wire Size: ${charger.wireSize}`);
-    lines.push(`Conduit: ${charger.conduitType}`);
-    lines.push(`Install Location: ${charger.installLocation}`);
-    lines.push('');
   }
 
   return lines.join('\n');

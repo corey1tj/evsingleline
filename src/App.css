@@ -1,5 +1,5 @@
 .app {
-  max-width: 860px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 1rem;
 }
@@ -81,6 +81,12 @@ legend {
   resize: vertical;
 }
 
+.readonly-field {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  cursor: default;
+}
+
 /* Loads table */
 .loads-table {
   width: 100%;
@@ -150,6 +156,19 @@ legend {
   background: #1d4ed8;
 }
 
+.btn-sm {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.btn-sub {
+  background: #d97706;
+}
+
+.btn-sub:hover {
+  background: #b45309;
+}
+
 .btn-remove {
   background: none;
   border: 1px solid #ef4444;
@@ -162,6 +181,48 @@ legend {
 
 .btn-remove:hover {
   background: #fef2f2;
+}
+
+/* Service sections */
+.service-section {
+  margin-bottom: 1rem;
+}
+
+.service-item {
+  border-left: 4px solid #0891b2;
+}
+
+.service-panels {
+  padding-left: 1rem;
+  border-left: 2px solid #e2e8f0;
+  margin-left: 0.5rem;
+}
+
+/* Panel tree hierarchy */
+.panel-tree-node {
+  margin-bottom: 0.5rem;
+}
+
+.panel-tree-node.depth-1 {
+  margin-left: 1.5rem;
+}
+
+.panel-tree-node.depth-2 {
+  margin-left: 3rem;
+}
+
+.panel-tree-node.depth-3 {
+  margin-left: 4.5rem;
+}
+
+.panel-chargers {
+  margin-left: 1.5rem;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.5rem 1.5rem;
 }
 
 /* Multi-section (panels, chargers) */
@@ -187,19 +248,74 @@ legend {
   border-left: 3px solid #2563eb;
 }
 
+.mdp-item {
+  border-left: 4px solid #dc2626;
+}
+
+.sub-panel-item {
+  border-left: 4px solid #d97706;
+}
+
+.charger-item {
+  border-left: 3px solid #059669;
+}
+
+.charger-item.dcfc {
+  border-left: 4px solid #7c3aed;
+  background: #faf5ff;
+}
+
 .legend-remove {
   margin-left: 1rem;
   vertical-align: middle;
 }
 
-.calc-row.sub {
-  padding-left: 1rem;
-  font-size: 0.85rem;
-  color: #64748b;
+/* Voltage and kW badges */
+.voltage-badge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
 }
 
-.calc-detail {
-  padding-left: 0.25rem;
+.kw-badge {
+  display: inline-block;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+/* Field hint and error */
+.field-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.field-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.input-warning {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15) !important;
 }
 
 /* Load calculation */
@@ -207,8 +323,20 @@ legend {
   background: #f8fafc;
 }
 
+.service-calc-block {
+  margin-bottom: 1rem;
+}
+
+.service-calc-title {
+  font-size: 1rem;
+  color: #0891b2;
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
 .calc-grid {
-  max-width: 400px;
+  max-width: 450px;
 }
 
 .calc-row {
@@ -221,6 +349,16 @@ legend {
 .calc-row.total {
   font-weight: 700;
   font-size: 1.05rem;
+}
+
+.calc-row.sub {
+  padding-left: 1rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.calc-detail {
+  padding-left: 0.25rem;
 }
 
 .calc-row.ok span:last-child {
@@ -263,6 +401,215 @@ legend {
   border-top: 1px solid #e2e8f0;
   margin: 0.4rem 0;
 }
+
+/* Diagram section */
+.diagram-toggle {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.btn-diagram {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.btn-diagram:hover {
+  background: #e2e8f0;
+}
+
+.btn-diagram.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.diagram-container {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+/* SVG diagram */
+.svg-diagram svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Block diagram */
+.block-diagram {
+  padding: 1rem;
+}
+
+.block-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.block-children {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  position: relative;
+}
+
+.block-children::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 0.5rem;
+  background: #94a3b8;
+}
+
+.block-box {
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  min-width: 140px;
+  text-align: center;
+  background: #fff;
+  position: relative;
+}
+
+.block-box::before {
+  content: '';
+  position: absolute;
+  top: -0.75rem;
+  left: 50%;
+  width: 2px;
+  height: 0.75rem;
+  background: #94a3b8;
+}
+
+.block-root > .block-box::before {
+  display: none;
+}
+
+.block-box.utility {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.block-box.service {
+  border-color: #0891b2;
+  background: #ecfeff;
+}
+
+.block-box.mdp {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.block-box.sub-panel {
+  border-color: #d97706;
+  background: #fffbeb;
+}
+
+.block-box.charger {
+  border-color: #059669;
+  background: #ecfdf5;
+}
+
+.block-box.charger.dcfc {
+  border-color: #7c3aed;
+  background: #faf5ff;
+}
+
+.block-box.existing-loads {
+  border-color: #64748b;
+  background: #f8fafc;
+  border-style: dashed;
+}
+
+.block-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+
+.block-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.block-details {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: 0.2rem;
+}
+
+.block-voltage {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.block-make,
+.block-meter,
+.block-spaces,
+.block-kw,
+.block-wire,
+.block-feed {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.block-kw {
+  font-weight: 600;
+  color: #059669;
+}
+
+.block-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.legend-color {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1.5px solid;
+}
+
+.legend-color.utility { border-color: #6366f1; background: #eef2ff; }
+.legend-color.service { border-color: #0891b2; background: #ecfeff; }
+.legend-color.mdp { border-color: #dc2626; background: #fef2f2; }
+.legend-color.sub-panel { border-color: #d97706; background: #fffbeb; }
+.legend-color.charger { border-color: #059669; background: #ecfdf5; }
+.legend-color.dcfc { border-color: #7c3aed; background: #faf5ff; }
 
 /* Actions bar */
 .actions {
@@ -335,5 +682,20 @@ legend {
 
   .loads-table {
     font-size: 0.8rem;
+  }
+
+  .panel-tree-node.depth-1,
+  .panel-tree-node.depth-2,
+  .panel-tree-node.depth-3 {
+    margin-left: 0.5rem;
+  }
+
+  .diagram-toggle {
+    flex-direction: column;
+  }
+
+  .block-children {
+    flex-direction: column;
+    align-items: center;
   }
 }

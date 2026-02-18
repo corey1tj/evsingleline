@@ -365,6 +365,12 @@ legend {
   color: #047857;
 }
 
+.type-dcfc {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+}
+
 /* EV charger button */
 .btn-ev {
   background: #059669;

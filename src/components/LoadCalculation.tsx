@@ -42,7 +42,7 @@ export function LoadCalculation({ data }: Props) {
     const effVoltage = panelForBreaker
       ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
       : serviceVoltage;
-    const v = chargerVoltage(b.chargerLevel || '', effVoltage);
+    const v = chargerVoltage(b.chargerLevel || '', effVoltage, b.chargerVolts);
     return sum + calcKw(String(v), b.chargerAmps || '');
   }, 0);
 

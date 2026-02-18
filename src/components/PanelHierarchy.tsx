@@ -433,7 +433,7 @@ function BreakerRow({
   const isSubPanel = breaker.type === 'subpanel';
   const isEv = breaker.type === 'evcharger';
 
-  const evVoltage = isEv ? chargerVoltage(breaker.chargerLevel || '', serviceVoltage) : 0;
+  const evVoltage = isEv ? chargerVoltage(breaker.chargerLevel || '', serviceVoltage, breaker.chargerVolts) : 0;
   const evKw = isEv ? calcKw(String(evVoltage), breaker.chargerAmps || '') : 0;
 
   return (
@@ -514,8 +514,8 @@ function BreakerRow({
           {isSubPanel ? (
             <span className="type-badge type-subpanel">Sub Panel</span>
           ) : isEv ? (
-            <span className="type-badge type-ev">
-              EV{evKw > 0 ? ` ${evKw.toFixed(1)}kW` : ''}
+            <span className={`type-badge ${breaker.chargerLevel === 'Level 3' ? 'type-dcfc' : 'type-ev'}`}>
+              {breaker.chargerLevel === 'Level 3' ? 'DCFC' : 'EV'}{evKw > 0 ? ` ${evKw.toFixed(1)}kW` : ''}
             </span>
           ) : (
             <span className="type-badge type-load">Load</span>
@@ -537,30 +537,43 @@ function BreakerRow({
                 Level
                 <select
                   value={breaker.chargerLevel || ''}
-                  onChange={(e) => update('chargerLevel', e.target.value)}
+                  onChange={(e) => {
+                    update('chargerLevel', e.target.value);
+                    // Clear custom voltage when changing level
+                    if (e.target.value) {
+                      onUpdate(panelId, breaker.id, {
+                        ...breaker,
+                        chargerLevel: e.target.value,
+                        chargerVolts: '',
+                      });
+                    }
+                  }}
                 >
                   <option value="">Select...</option>
-                  <option value="Level 1">Level 1 (120V)</option>
-                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : serviceVoltage === '277/480V' ? '480V' : '240V'})</option>
+                  <option value="Level 1">Level 1 (120V AC)</option>
+                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : serviceVoltage === '277/480V' ? '480V' : '240V'} AC)</option>
+                  <option value="Level 3">Level 3 DCFC (480V)</option>
                 </select>
               </label>
               <label>
                 Charger Amps
-                <select
+                <input
+                  type="number"
                   value={breaker.chargerAmps || ''}
                   onChange={(e) => update('chargerAmps', e.target.value)}
-                >
-                  <option value="">--</option>
-                  <option value="12">12A</option>
-                  <option value="16">16A</option>
-                  <option value="24">24A</option>
-                  <option value="32">32A</option>
-                  <option value="40">40A</option>
-                  <option value="48">48A</option>
-                  <option value="50">50A</option>
-                  <option value="60">60A</option>
-                  <option value="80">80A</option>
-                </select>
+                  placeholder="e.g. 32"
+                  min="0"
+                />
+              </label>
+              <label>
+                Charger Volts
+                <input
+                  type="number"
+                  value={breaker.chargerVolts || ''}
+                  onChange={(e) => update('chargerVolts', e.target.value)}
+                  placeholder={`Default: ${evVoltage}V`}
+                  min="0"
+                />
               </label>
               <label>
                 kW Output

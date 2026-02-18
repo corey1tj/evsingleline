@@ -230,14 +230,24 @@ export function necDemandAmps(breakers: Breaker[]): { continuous: number; nonCon
   return { continuous, nonContinuous, totalDemand };
 }
 
-/** Default NEC load type for common load labels */
+/** Default NEC load type for common load labels.
+ *  NEC 210.2 defines continuous load as one where the maximum current
+ *  is expected to continue for 3 hours or more. */
 export function defaultLoadType(label: string, type: string): LoadType {
   if (type === 'evcharger') return 'continuous';  // NEC 625.40
-  // Common continuous loads per NEC
-  const continuousLabels = ['lighting', 'electric furnace'];
   const lower = label.toLowerCase();
-  for (const cl of continuousLabels) {
-    if (lower.includes(cl)) return 'continuous';
+  // Continuous loads per NEC (expected to run >= 3 hours)
+  const continuousPatterns = [
+    'lighting', 'emergency lighting', 'exterior lighting', 'parking lot lighting',
+    'sign', 'signage',
+    'electric furnace', 'unit heater',
+    'walk-in cooler', 'walk-in freezer',
+    'fire alarm', 'security system', 'bms', 'building automation',
+    'access control', 'smoke detection', 'pa / intercom',
+    'server', 'it equipment', 'ups',
+  ];
+  for (const pattern of continuousPatterns) {
+    if (lower.includes(pattern)) return 'continuous';
   }
   return 'noncontinuous';
 }

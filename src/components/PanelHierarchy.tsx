@@ -22,24 +22,97 @@ interface Props {
   depth: number;
 }
 
-const COMMON_LOADS = [
-  'HVAC / Heat Pump',
-  'Air Conditioner',
-  'Electric Range / Oven',
-  'Electric Dryer',
-  'Water Heater',
-  'Pool / Spa Pump',
-  'Well Pump',
-  'Electric Furnace',
-  'Lighting',
-  'Receptacles',
-  'Dishwasher',
-  'Garbage Disposal',
-  'Microwave',
-  'Washer',
-  'Garage Door Opener',
-  'Other',
+const LOAD_CATEGORIES: { category: string; loads: string[] }[] = [
+  {
+    category: 'HVAC / Mechanical',
+    loads: [
+      'HVAC / Heat Pump',
+      'Air Conditioner',
+      'RTU (Rooftop Unit)',
+      'AHU (Air Handler)',
+      'Chiller',
+      'Boiler',
+      'Compressor',
+      'Electric Furnace',
+      'Exhaust Fan',
+      'Supply Fan',
+      'VAV Box',
+      'Unit Heater',
+      'Make-Up Air Unit',
+    ],
+  },
+  {
+    category: 'Lighting',
+    loads: [
+      'Lighting',
+      'Emergency Lighting',
+      'Exterior Lighting',
+      'Parking Lot Lighting',
+      'Sign / Signage',
+    ],
+  },
+  {
+    category: 'Power / Receptacles',
+    loads: [
+      'Receptacles',
+      'Motor',
+      'Welding Outlet',
+      'UPS',
+      'Server / IT Equipment',
+      'Elevator',
+      'Escalator',
+      'Conveyor',
+      'Garage Door Opener',
+    ],
+  },
+  {
+    category: 'Kitchen / Food Service',
+    loads: [
+      'Electric Range / Oven',
+      'Commercial Oven',
+      'Walk-in Cooler',
+      'Walk-in Freezer',
+      'Ice Machine',
+      'Dishwasher',
+      'Garbage Disposal',
+      'Microwave',
+      'Hood Exhaust Fan',
+    ],
+  },
+  {
+    category: 'Plumbing / Fire',
+    loads: [
+      'Water Heater',
+      'Booster Pump',
+      'Sump Pump',
+      'Well Pump',
+      'Pool / Spa Pump',
+      'Fire Pump',
+      'Jockey Pump',
+    ],
+  },
+  {
+    category: 'Life Safety / Controls',
+    loads: [
+      'Fire Alarm Panel',
+      'Security System',
+      'BMS / Building Automation',
+      'Access Control',
+      'Smoke Detection',
+      'PA / Intercom',
+    ],
+  },
+  {
+    category: 'Residential',
+    loads: [
+      'Electric Dryer',
+      'Washer',
+    ],
+  },
 ];
+
+// Flat list of all load names (for validation checks)
+const COMMON_LOADS = LOAD_CATEGORIES.flatMap((c) => c.loads).concat(['Other']);
 
 const COMMON_PANEL_AMPS = ['100', '125', '150', '200', '225', '300', '400', '600', '800', '1000', '1200'];
 
@@ -509,9 +582,14 @@ function BreakerRow({
                 }}
               >
                 <option value="">Select...</option>
-                {COMMON_LOADS.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                {LOAD_CATEGORIES.map((cat) => (
+                  <optgroup key={cat.category} label={cat.category}>
+                    {cat.loads.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </optgroup>
                 ))}
+                <option value="Other">Other</option>
               </select>
               {!COMMON_LOADS.includes(breaker.label) && (
                 <input

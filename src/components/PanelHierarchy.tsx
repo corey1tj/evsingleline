@@ -169,6 +169,7 @@ export function PanelHierarchy({
           {hasTransformer && (
             <span className="panel-badge panel-badge-xfmr">XFMR {effectiveVoltage}</span>
           )}
+          {panel.condition === 'new' && <span className="condition-badge condition-new">NEW</span>}
           {canRemove && (
             <button type="button" className="btn-remove legend-remove" onClick={() => onRemovePanel(panel.id)}>
               Remove
@@ -267,6 +268,16 @@ export function PanelHierarchy({
 
         <div className="form-grid">
           <label>
+            Status
+            <select
+              value={panel.condition || 'existing'}
+              onChange={(e) => updateField('condition', e.target.value)}
+            >
+              <option value="existing">Existing</option>
+              <option value="new">New / Proposed</option>
+            </select>
+          </label>
+          <label>
             Panel Name
             <input
               type="text"
@@ -326,7 +337,7 @@ export function PanelHierarchy({
               type="text"
               value={totalSp > 0 ? `${spacesUsed} used / ${availableSpaces} available` : '--'}
               readOnly
-              className="computed-field"
+              className={`computed-field${totalSp > 0 && spacesUsed !== totalSp ? ' spaces-mismatch' : ''}`}
             />
           </label>
         </div>
@@ -350,6 +361,8 @@ export function PanelHierarchy({
                   <th>Voltage</th>
                   <th>Sp</th>
                   <th>Type</th>
+                  <th>Load</th>
+                  <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -384,6 +397,11 @@ export function PanelHierarchy({
           {totalSp > 0 && availableSpaces < 0 && (
             <div className="calc-alert warning" style={{ marginTop: '0.5rem' }}>
               Panel exceeds available spaces by {Math.abs(availableSpaces)}.
+            </div>
+          )}
+          {totalSp > 0 && availableSpaces > 0 && (
+            <div className="calc-alert caution" style={{ marginTop: '0.5rem' }}>
+              {availableSpaces} space{availableSpaces > 1 ? 's' : ''} unaccounted for ({spacesUsed} of {totalSp} documented).
             </div>
           )}
         </div>
@@ -434,7 +452,8 @@ function BreakerRow({
   const isSubPanel = breaker.type === 'subpanel';
   const isEv = breaker.type === 'evcharger';
 
-  const evVoltage = isEv ? chargerVoltage(breaker.chargerLevel || '', serviceVoltage, breaker.chargerVolts) : 0;
+  // EV charger voltage is simply the breaker voltage
+  const evVoltage = isEv ? Number(breaker.voltage) || 0 : 0;
   const evKw = isEv ? calcKw(String(evVoltage), breaker.chargerAmps || '') : 0;
 
   return (
@@ -445,8 +464,8 @@ function BreakerRow({
             type="text"
             value={breaker.circuitNumber}
             onChange={(e) => update('circuitNumber', e.target.value)}
-            className="ckt-input"
-            placeholder="#"
+            className={spaces > 1 ? 'ckt-input-2p' : 'ckt-input'}
+            placeholder={spaces > 1 ? '#,#' : '#'}
           />
         </td>
         <td>
@@ -523,6 +542,28 @@ function BreakerRow({
           )}
         </td>
         <td>
+          {!isSubPanel && (
+            <select
+              value={breaker.loadType || 'noncontinuous'}
+              onChange={(e) => update('loadType', e.target.value)}
+              className="load-type-select"
+            >
+              <option value="noncontinuous">Non-Cont</option>
+              <option value="continuous">Cont</option>
+            </select>
+          )}
+        </td>
+        <td>
+          <select
+            value={breaker.condition || 'existing'}
+            onChange={(e) => update('condition', e.target.value)}
+            className="condition-select"
+          >
+            <option value="existing">Existing</option>
+            <option value="new">New</option>
+          </select>
+        </td>
+        <td>
           <button type="button" className="btn-remove btn-remove-sm" onClick={() => onRemove(panelId, breaker.id)}>
             &times;
           </button>
@@ -532,27 +573,26 @@ function BreakerRow({
       {isEv && (
         <tr className="breaker-row-ev-detail">
           <td></td>
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="ev-detail-grid">
               <label>
                 Level
                 <select
                   value={breaker.chargerLevel || ''}
                   onChange={(e) => {
-                    update('chargerLevel', e.target.value);
-                    // Clear custom voltage when changing level
-                    if (e.target.value) {
-                      onUpdate(panelId, breaker.id, {
-                        ...breaker,
-                        chargerLevel: e.target.value,
-                        chargerVolts: '',
-                      });
-                    }
+                    const level = e.target.value;
+                    // Auto-set breaker voltage to match level + panel voltage
+                    const autoVolts = level ? String(chargerVoltage(level, serviceVoltage)) : breaker.voltage;
+                    onUpdate(panelId, breaker.id, {
+                      ...breaker,
+                      chargerLevel: level,
+                      voltage: autoVolts,
+                    });
                   }}
                 >
                   <option value="">Select...</option>
                   <option value="Level 1">Level 1 (120V AC)</option>
-                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : serviceVoltage === '277/480V' ? '480V' : '240V'} AC)</option>
+                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'} AC)</option>
                   <option value="Level 3">Level 3 DCFC (480V)</option>
                 </select>
               </label>
@@ -567,13 +607,13 @@ function BreakerRow({
                 />
               </label>
               <label>
-                Charger Volts
+                # Ports
                 <input
                   type="number"
-                  value={breaker.chargerVolts || ''}
-                  onChange={(e) => update('chargerVolts', e.target.value)}
-                  placeholder={`Default: ${evVoltage}V`}
-                  min="0"
+                  value={breaker.chargerPorts || ''}
+                  onChange={(e) => update('chargerPorts', e.target.value)}
+                  placeholder="e.g. 1"
+                  min="1"
                 />
               </label>
               <label>

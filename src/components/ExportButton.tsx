@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { breakerSpaces, totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { breakerSpaces, totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, necDemandAmps, evChargerKw } from '../types';
 import { PdfExportButton } from './PdfExportButton';
 
 interface Props {
@@ -10,8 +10,9 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
   const label = panel.panelName || 'Panel';
   const effectiveVoltage = getEffectivePanelVoltage(panel, allPanels, serviceVoltage);
   const voltageNote = panel.transformer ? ` [${effectiveVoltage} via Transformer]` : '';
+  const conditionNote = panel.condition === 'new' ? ' [NEW]' : '';
 
-  lines.push(`${indent}${label.toUpperCase()}${voltageNote}`);
+  lines.push(`${indent}${label.toUpperCase()}${voltageNote}${conditionNote}`);
   lines.push(`${indent}${'-'.repeat(30)}`);
   lines.push(`${indent}Location: ${panel.panelLocation}`);
   lines.push(`${indent}Make/Model: ${panel.panelMake} ${panel.panelModel}`);
@@ -37,18 +38,22 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
     lines.push(`${indent}Breakers:`);
     for (const b of panel.breakers) {
       const spaces = breakerSpaces(b.voltage);
+      const cond = b.condition === 'new' ? ' [NEW]' : '';
+      const loadLabel = b.loadType === 'continuous' ? ' [CONT]' : '';
       if (b.type === 'subpanel') {
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]${cond}`);
       } else if (b.type === 'evcharger') {
-        const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage, b.chargerVolts);
+        const v = Number(b.voltage) || 0;
         const kw = calcKw(String(v), b.chargerAmps || '');
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]`);
+        const ports = Number(b.chargerPorts) || 0;
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]${loadLabel}${cond}`);
         if (kw > 0) lines.push(`${indent}    kW Output: ${kw.toFixed(1)} kW (${v}V x ${b.chargerAmps}A)`);
         if (b.chargerLevel) lines.push(`${indent}    Level: ${b.chargerLevel}`);
+        if (ports > 0) lines.push(`${indent}    Ports: ${ports}`);
         if (b.wireSize) lines.push(`${indent}    Wire: ${b.wireSize}, ${b.wireRunFeet || '?'} ft, ${b.conduitType || '?'}`);
         if (b.installLocation) lines.push(`${indent}    Location: ${b.installLocation}`);
       } else {
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)`);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)${loadLabel}${cond}`);
       }
     }
   }
@@ -81,7 +86,7 @@ function formatData(data: SingleLineData): string {
   }
   lines.push('');
 
-  lines.push('SERVICE ENTRANCE');
+  lines.push(`SERVICE ENTRANCE${data.serviceEntrance.condition === 'new' ? ' [NEW]' : ''}`);
   lines.push('-'.repeat(30));
   lines.push(`Utility: ${data.serviceEntrance.utilityProvider}`);
   lines.push(`Voltage: ${data.serviceEntrance.serviceVoltage}`);
@@ -94,6 +99,30 @@ function formatData(data: SingleLineData): string {
   for (const panel of rootPanels) {
     formatPanel(panel, data.panels, '', sv, lines);
   }
+
+  // NEC Demand Calculation
+  const allBreakers = data.panels.flatMap((p) => p.breakers.filter((b) => b.type !== 'subpanel'));
+  const demand = necDemandAmps(allBreakers);
+  const allEv = allBreakers.filter((b) => b.type === 'evcharger');
+  const peakKwLoads = allBreakers
+    .filter((b) => b.type !== 'evcharger')
+    .reduce((sum, b) => sum + ((Number(b.voltage) || 0) * (Number(b.amps) || 0)) / 1000, 0);
+  const peakKwEv = allEv.reduce((sum, b) => sum + evChargerKw(b), 0);
+
+  lines.push('NEC DEMAND CALCULATION');
+  lines.push('-'.repeat(30));
+  lines.push(`Continuous Loads: ${demand.continuous}A x 1.25 = ${Math.ceil(demand.continuous * 1.25)}A`);
+  lines.push(`Non-Continuous Loads: ${demand.nonContinuous}A x 1.0 = ${demand.nonContinuous}A`);
+  lines.push(`NEC Total Demand: ${demand.totalDemand}A`);
+  lines.push('');
+  lines.push('PEAK kW DEMAND');
+  lines.push('-'.repeat(30));
+  lines.push(`General Loads: ${peakKwLoads.toFixed(1)} kW`);
+  if (allEv.length > 0) {
+    lines.push(`EV Chargers (output): ${peakKwEv.toFixed(1)} kW`);
+  }
+  lines.push(`Total Peak Demand: ${(peakKwLoads + peakKwEv).toFixed(1)} kW`);
+  lines.push('');
 
   return lines.join('\n');
 }

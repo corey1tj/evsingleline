@@ -23,6 +23,7 @@ function createPanel(overrides?: Partial<MainPanel>): MainPanel {
     mainBreakerAmps: '',
     busRatingAmps: '',
     totalSpaces: '',
+    condition: 'existing',
     breakers: [],
     ...overrides,
   };
@@ -36,6 +37,8 @@ function createBreaker(overrides?: Partial<Breaker>): Breaker {
     amps: '',
     voltage: '240',
     type: 'load',
+    condition: 'existing',
+    loadType: 'noncontinuous',
     ...overrides,
   };
 }
@@ -65,11 +68,20 @@ function migrateData(parsed: any): SingleLineData {
     parsed.evChargers = [{ ...parsed.evCharger, id: 'legacy_1', chargerLabel: 'EV Charger 1' }];
     delete parsed.evCharger;
   }
-  // Ensure panels have breakers array
+  // Ensure panels have breakers array and condition fields
   if (parsed.panels) {
     for (const p of parsed.panels) {
       if (!p.breakers) p.breakers = [];
+      if (!p.condition) p.condition = 'existing';
+      for (const b of p.breakers) {
+        if (!b.condition) b.condition = b.type === 'evcharger' ? 'new' : 'existing';
+        if (!b.loadType) b.loadType = b.type === 'evcharger' ? 'continuous' : 'noncontinuous';
+      }
     }
+  }
+  // Ensure service entrance has condition
+  if (parsed.serviceEntrance && !parsed.serviceEntrance.condition) {
+    parsed.serviceEntrance.condition = 'existing';
   }
   // Migrate old existingLoads into the first panel's breakers
   if (parsed.existingLoads && parsed.existingLoads.length > 0 && parsed.panels?.length > 0) {
@@ -158,6 +170,7 @@ function getInitialData(): SingleLineData {
       servicePhase: '',
       serviceAmperage: '',
       meterNumber: '',
+      condition: 'existing',
     },
     panels: [mdp],
     evChargers: [],
@@ -275,6 +288,8 @@ function App() {
       circuitNumber: nextCircuit,
       label: `EV Charger ${evCount + 1}`,
       type: 'evcharger',
+      condition: 'new',
+      loadType: 'continuous',  // NEC 625.40
       chargerLevel: 'Level 2',
     });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });

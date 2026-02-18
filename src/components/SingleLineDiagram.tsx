@@ -1,6 +1,6 @@
 import { useRef, useCallback, type ReactNode } from 'react';
 import type { SingleLineData, MainPanel } from '../types';
-import { calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { calcKw, getEffectivePanelVoltage, transformerFLA } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -24,6 +24,8 @@ const LOAD_FILL = '#f1f5f9';
 const LOAD_STROKE = '#94a3b8';
 const XFMR_FILL = '#fef3c7';
 const XFMR_STROKE = '#d97706';
+const NEW_FILL = '#fef9c3';
+const NEW_STROKE = '#ca8a04';
 const FONT = '11px system-ui, sans-serif';
 const FONT_SMALL = '9px system-ui, sans-serif';
 const FONT_LABEL = '10px system-ui, sans-serif';
@@ -164,20 +166,23 @@ export function SingleLineDiagram({ data }: Props) {
 
     // Panel box
     const boxX = panelCx - PANEL_BOX_W / 2;
-    const fill = isSubPanel ? SUBPANEL_FILL : PANEL_FILL;
-    const stroke = isSubPanel ? SUBPANEL_STROKE : PANEL_STROKE;
+    const isNewPanel = panel.condition === 'new';
+    const fill = isNewPanel ? NEW_FILL : isSubPanel ? SUBPANEL_FILL : PANEL_FILL;
+    const stroke = isNewPanel ? NEW_STROKE : isSubPanel ? SUBPANEL_STROKE : PANEL_STROKE;
 
     const effectiveVoltage = getEffectivePanelVoltage(panel, data.panels, serviceVoltage);
 
     elements.push(
       <g key={`panel-${panel.id}`}>
         <rect x={boxX} y={curY} width={PANEL_BOX_W} height={PANEL_BOX_H} rx={4}
-          fill={fill} stroke={stroke} strokeWidth={1.5} />
+          fill={fill} stroke={stroke} strokeWidth={1.5}
+          strokeDasharray={isNewPanel ? '4 2' : undefined} />
         <text x={panelCx} y={curY + 16} textAnchor="middle" fontSize="11" fontWeight="600" fill="#1e293b">
           {(panel.panelName || 'Panel').substring(0, 16)}
         </text>
         <text x={panelCx} y={curY + 30} textAnchor="middle" fontSize="9" fill="#64748b">
           {[
+            isNewPanel ? 'NEW' : '',
             panel.mainBreakerAmps ? `${panel.mainBreakerAmps}A` : '',
             panel.totalSpaces ? `${panel.totalSpaces}sp` : '',
             panel.transformer ? effectiveVoltage : '',
@@ -259,13 +264,15 @@ export function SingleLineDiagram({ data }: Props) {
 
         // Breaker box
         const isEv = col.b.type === 'evcharger';
-        const bFill = isEv ? EV_FILL : LOAD_FILL;
-        const bStroke = isEv ? EV_STROKE : LOAD_STROKE;
+        const isNewBreaker = col.b.condition === 'new';
+        const bFill = isNewBreaker ? NEW_FILL : isEv ? EV_FILL : LOAD_FILL;
+        const bStroke = isNewBreaker ? NEW_STROKE : isEv ? EV_STROKE : LOAD_STROKE;
 
         elements.push(
           <g key={`breaker-${col.b.id}`}>
             <rect x={bCx - BREAKER_W / 2} y={breakerY} width={BREAKER_W} height={BREAKER_H} rx={3}
-              fill={bFill} stroke={bStroke} strokeWidth={1} />
+              fill={bFill} stroke={bStroke} strokeWidth={1}
+              strokeDasharray={isNewBreaker ? '4 2' : undefined} />
             <text x={bCx} y={breakerY + 12} textAnchor="middle" style={{ font: FONT_SMALL }} fill="#1e293b">
               {(col.b.label || 'Load').substring(0, 14)}
             </text>
@@ -284,7 +291,7 @@ export function SingleLineDiagram({ data }: Props) {
               stroke={EV_STROKE} strokeWidth={1} />
           );
 
-          const v = chargerVoltage(col.b.chargerLevel || '', effectiveVoltage, col.b.chargerVolts);
+          const v = Number(col.b.voltage) || 0;
           const kw = calcKw(String(v), col.b.chargerAmps || '');
           const isDcfc = col.b.chargerLevel === 'Level 3';
           const evBoxW = isDcfc ? 40 : 32;
@@ -301,10 +308,16 @@ export function SingleLineDiagram({ data }: Props) {
                   {kw.toFixed(1)}kW
                 </text>
               )}
+              {col.b.chargerPorts && Number(col.b.chargerPorts) > 0 && (
+                <text x={bCx} y={evY + (kw > 0 ? 42 : 32)} textAnchor="middle" style={{ font: FONT_SMALL }} fill="#64748b">
+                  {col.b.chargerPorts} port{Number(col.b.chargerPorts) > 1 ? 's' : ''}
+                </text>
+              )}
             </g>
           );
 
-          const endY = evY + 38;
+          const hasPorts = col.b.chargerPorts && Number(col.b.chargerPorts) > 0;
+          const endY = evY + (hasPorts ? (kw > 0 ? 48 : 38) : 38);
           if (endY > maxY) maxY = endY;
         } else {
           const endY = breakerY + BREAKER_H + 8;

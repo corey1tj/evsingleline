@@ -1,7 +1,9 @@
-import type { ExistingLoad } from '../types';
+import type { ExistingLoad, Panel } from '../types';
+import { loadVoltagesForBus } from '../types';
 
 interface Props {
   loads: ExistingLoad[];
+  panels: Panel[];
   onChange: (loads: ExistingLoad[]) => void;
 }
 
@@ -20,11 +22,13 @@ const COMMON_LOADS = [
 
 let nextId = 1;
 
-export function ExistingLoadsForm({ loads, onChange }: Props) {
+export function ExistingLoadsForm({ loads, panels, onChange }: Props) {
+  const defaultPanelId = panels.length > 0 ? panels[0].id : '';
+
   const addLoad = () => {
     onChange([
       ...loads,
-      { id: String(nextId++), name: '', breakerAmps: '', voltage: '240' },
+      { id: String(nextId++), panelId: defaultPanelId, name: '', breakerAmps: '', voltage: '240' },
     ]);
   };
 
@@ -38,6 +42,8 @@ export function ExistingLoadsForm({ loads, onChange }: Props) {
 
   const totalAmps = loads.reduce((sum, l) => sum + (Number(l.breakerAmps) || 0), 0);
 
+  const getPanel = (panelId: string) => panels.find((p) => p.id === panelId);
+
   return (
     <fieldset>
       <legend>Existing Loads</legend>
@@ -45,6 +51,7 @@ export function ExistingLoadsForm({ loads, onChange }: Props) {
         <table className="loads-table">
           <thead>
             <tr>
+              {panels.length > 1 && <th>Panel</th>}
               <th>Load Name</th>
               <th>Breaker (A)</th>
               <th>Voltage</th>
@@ -52,69 +59,87 @@ export function ExistingLoadsForm({ loads, onChange }: Props) {
             </tr>
           </thead>
           <tbody>
-            {loads.map((load) => (
-              <tr key={load.id}>
-                <td>
-                  <select
-                    value={COMMON_LOADS.includes(load.name) ? load.name : 'Other'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateLoad(load.id, 'name', val === 'Other' ? '' : val);
-                    }}
-                  >
-                    <option value="">Select...</option>
-                    {COMMON_LOADS.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                  {!COMMON_LOADS.includes(load.name) && load.name !== '' ? null : null}
-                  {(() => {
-                    const isOther =
-                      !COMMON_LOADS.includes(load.name) ||
-                      load.name === 'Other' ||
-                      load.name === '';
-                    return isOther ? (
-                      <input
-                        type="text"
-                        placeholder="Describe load..."
-                        value={load.name === 'Other' ? '' : load.name}
-                        onChange={(e) => updateLoad(load.id, 'name', e.target.value)}
-                        style={{ marginTop: '0.25rem' }}
-                      />
-                    ) : null;
-                  })()}
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={load.breakerAmps}
-                    onChange={(e) => updateLoad(load.id, 'breakerAmps', e.target.value)}
-                    min="0"
-                    style={{ width: '80px' }}
-                  />
-                </td>
-                <td>
-                  <select
-                    value={load.voltage}
-                    onChange={(e) => updateLoad(load.id, 'voltage', e.target.value)}
-                  >
-                    <option value="120">120V</option>
-                    <option value="240">240V</option>
-                  </select>
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn-remove"
-                    onClick={() => removeLoad(load.id)}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {loads.map((load) => {
+              const panel = getPanel(load.panelId);
+              const voltageOpts = panel ? loadVoltagesForBus(panel.busVoltage) : ['120', '240'];
+              return (
+                <tr key={load.id}>
+                  {panels.length > 1 && (
+                    <td>
+                      <select
+                        value={load.panelId}
+                        onChange={(e) => updateLoad(load.id, 'panelId', e.target.value)}
+                      >
+                        {panels.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.panelName || `Panel ${p.id}`} ({p.busVoltage || '?'}V)
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
+                  <td>
+                    <select
+                      value={COMMON_LOADS.includes(load.name) ? load.name : 'Other'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateLoad(load.id, 'name', val === 'Other' ? '' : val);
+                      }}
+                    >
+                      <option value="">Select...</option>
+                      {COMMON_LOADS.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const isOther =
+                        !COMMON_LOADS.includes(load.name) ||
+                        load.name === 'Other' ||
+                        load.name === '';
+                      return isOther ? (
+                        <input
+                          type="text"
+                          placeholder="Describe load..."
+                          value={load.name === 'Other' ? '' : load.name}
+                          onChange={(e) => updateLoad(load.id, 'name', e.target.value)}
+                          style={{ marginTop: '0.25rem' }}
+                        />
+                      ) : null;
+                    })()}
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      value={load.breakerAmps}
+                      onChange={(e) => updateLoad(load.id, 'breakerAmps', e.target.value)}
+                      min="0"
+                      style={{ width: '80px' }}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={load.voltage}
+                      onChange={(e) => updateLoad(load.id, 'voltage', e.target.value)}
+                    >
+                      {voltageOpts.map((v) => (
+                        <option key={v} value={v}>{v}V</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn-remove"
+                      onClick={() => removeLoad(load.id)}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

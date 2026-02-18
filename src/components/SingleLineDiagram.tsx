@@ -1,6 +1,6 @@
-import { useRef, type ReactNode } from 'react';
+import { useRef, useCallback, type ReactNode } from 'react';
 import type { SingleLineData, MainPanel } from '../types';
-import { calcKw, chargerVoltage } from '../types';
+import { calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -12,6 +12,7 @@ const PANEL_BOX_W = 120;
 const PANEL_BOX_H = 40;
 const BREAKER_W = 100;
 const BREAKER_H = 28;
+const XFMR_R = 14;
 const LINE_COLOR = '#334155';
 const PANEL_FILL = '#dbeafe';
 const PANEL_STROKE = '#2563eb';
@@ -21,6 +22,8 @@ const EV_FILL = '#d1fae5';
 const EV_STROKE = '#059669';
 const LOAD_FILL = '#f1f5f9';
 const LOAD_STROKE = '#94a3b8';
+const XFMR_FILL = '#fef3c7';
+const XFMR_STROKE = '#d97706';
 const FONT = '11px system-ui, sans-serif';
 const FONT_SMALL = '9px system-ui, sans-serif';
 const FONT_LABEL = '10px system-ui, sans-serif';
@@ -30,7 +33,6 @@ function measurePanelWidth(panel: MainPanel, allPanels: MainPanel[]): number {
   const childPanels = allPanels.filter((p) => p.parentPanelId === panel.id);
   const nonSubBreakers = panel.breakers.filter((b) => b.type !== 'subpanel');
 
-  // Count leaf columns: each non-sub breaker = 1 column, each sub-panel = its own width
   const breakerCols = nonSubBreakers.length;
   const childWidths = childPanels.map((c) => measurePanelWidth(c, allPanels));
   const childTotal = childWidths.reduce((s, w) => s + w, 0);
@@ -45,6 +47,36 @@ export function SingleLineDiagram({ data }: Props) {
   const sv = data.serviceEntrance;
   const serviceVoltage = sv.serviceVoltage;
   const rootPanels = data.panels.filter((p) => !p.parentPanelId);
+
+  // Convert SVG to PNG data URL for PDF export
+  const getSvgDataUrl = useCallback(async (): Promise<{ dataUrl: string; width: number; height: number } | null> => {
+    if (!svgRef.current) return null;
+    const svgData = new XMLSerializer().serializeToString(svgRef.current);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        resolve({ dataUrl: canvas.toDataURL('image/png'), width: img.naturalWidth, height: img.naturalHeight });
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  }, []);
 
   if (rootPanels.length === 0) return null;
 
@@ -135,6 +167,8 @@ export function SingleLineDiagram({ data }: Props) {
     const fill = isSubPanel ? SUBPANEL_FILL : PANEL_FILL;
     const stroke = isSubPanel ? SUBPANEL_STROKE : PANEL_STROKE;
 
+    const effectiveVoltage = getEffectivePanelVoltage(panel, data.panels, serviceVoltage);
+
     elements.push(
       <g key={`panel-${panel.id}`}>
         <rect x={boxX} y={curY} width={PANEL_BOX_W} height={PANEL_BOX_H} rx={4}
@@ -143,7 +177,11 @@ export function SingleLineDiagram({ data }: Props) {
           {(panel.panelName || 'Panel').substring(0, 16)}
         </text>
         <text x={panelCx} y={curY + 30} textAnchor="middle" fontSize="9" fill="#64748b">
-          {[panel.mainBreakerAmps ? `${panel.mainBreakerAmps}A` : '', panel.totalSpaces ? `${panel.totalSpaces}sp` : ''].filter(Boolean).join(' / ')}
+          {[
+            panel.mainBreakerAmps ? `${panel.mainBreakerAmps}A` : '',
+            panel.totalSpaces ? `${panel.totalSpaces}sp` : '',
+            panel.transformer ? effectiveVoltage : '',
+          ].filter(Boolean).join(' / ')}
         </text>
       </g>
     );
@@ -187,8 +225,19 @@ export function SingleLineDiagram({ data }: Props) {
     );
     // Horizontal bus bar
     if (allCols.length > 1) {
+      // Calculate first and last column centers
+      let firstCx = busStartX + COL_WIDTH / 2;
+      let lastCx = busEndX;
+      let tempX = busStartX;
+      for (let i = 0; i < allCols.length; i++) {
+        const col = allCols[i];
+        const colW = col.kind === 'breaker' ? COL_WIDTH : Math.max(COL_WIDTH, col.width);
+        if (i === 0) firstCx = tempX + colW / 2;
+        if (i === allCols.length - 1) lastCx = tempX + colW / 2;
+        tempX += colW;
+      }
       elements.push(
-        <line key={`bus-${panel.id}`} x1={busStartX + COL_WIDTH / 2} y1={busY} x2={busEndX - COL_WIDTH / 2 + (allCols[allCols.length - 1].kind === 'subpanel' ? (allCols[allCols.length - 1] as any).width / 2 - COL_WIDTH / 2 : 0)} y2={busY}
+        <line key={`bus-${panel.id}`} x1={firstCx} y1={busY} x2={lastCx} y2={busY}
           stroke={LINE_COLOR} strokeWidth={2} />
       );
     }
@@ -235,7 +284,7 @@ export function SingleLineDiagram({ data }: Props) {
               stroke={EV_STROKE} strokeWidth={1} />
           );
 
-          const v = chargerVoltage(col.b.chargerLevel || '', serviceVoltage);
+          const v = chargerVoltage(col.b.chargerLevel || '', effectiveVoltage);
           const kw = calcKw(String(v), col.b.chargerAmps || '');
 
           elements.push(
@@ -263,17 +312,18 @@ export function SingleLineDiagram({ data }: Props) {
         // Sub-panel column
         const colW = Math.max(COL_WIDTH, col.width);
         const spCx = colX + colW / 2;
+        const childPanel = col.p;
+        const hasXfmr = !!childPanel.transformer;
 
-        // Drop line from bus to sub-panel
+        // Drop line from bus to feed breaker
         elements.push(
           <line key={`drop-sub-${col.p.id}`} x1={spCx} y1={busY} x2={spCx} y2={breakerY}
             stroke={LINE_COLOR} strokeWidth={1.5} />
         );
 
-        // Sub-panel breaker symbol (the feed breaker)
+        // Sub-panel feed breaker symbol
         const feedBreaker = panel.breakers.find((b) => b.subPanelId === col.p.id);
         if (feedBreaker) {
-          // Small breaker symbol
           elements.push(
             <g key={`feed-bkr-${feedBreaker.id}`}>
               <line x1={spCx - 5} y1={breakerY} x2={spCx + 5} y2={breakerY} stroke={SUBPANEL_STROKE} strokeWidth={2} />
@@ -287,15 +337,81 @@ export function SingleLineDiagram({ data }: Props) {
           );
         }
 
-        // Line from feed breaker to sub-panel
-        const subPanelY = breakerY + 16;
-        elements.push(
-          <line key={`line-to-sub-${col.p.id}`} x1={spCx} y1={breakerY + 4} x2={spCx} y2={subPanelY}
-            stroke={LINE_COLOR} strokeWidth={1.5} />
-        );
+        let nextY = breakerY + 4;
+
+        // -- Transformer symbol (two overlapping circles) --
+        if (hasXfmr) {
+          const xfmr = childPanel.transformer!;
+          const xfmrY = nextY + 10 + XFMR_R;
+          const kva = Number(xfmr.kva) || 0;
+
+          // Line from feed breaker to transformer
+          elements.push(
+            <line key={`line-to-xfmr-${col.p.id}`} x1={spCx} y1={nextY} x2={spCx} y2={xfmrY - XFMR_R}
+              stroke={LINE_COLOR} strokeWidth={1.5} />
+          );
+
+          // Primary coil (top circle)
+          elements.push(
+            <circle key={`xfmr-pri-${col.p.id}`} cx={spCx} cy={xfmrY - 3} r={XFMR_R}
+              fill={XFMR_FILL} stroke={XFMR_STROKE} strokeWidth={1.5} />
+          );
+          // Secondary coil (bottom circle, overlapping)
+          elements.push(
+            <circle key={`xfmr-sec-${col.p.id}`} cx={spCx} cy={xfmrY + 3} r={XFMR_R}
+              fill={XFMR_FILL} stroke={XFMR_STROKE} strokeWidth={1.5} />
+          );
+
+          // Primary voltage label
+          elements.push(
+            <text key={`xfmr-pri-lbl-${col.p.id}`} x={spCx} y={xfmrY - 6}
+              textAnchor="middle" style={{ font: FONT_SMALL }} fontWeight="600" fill="#92400e">
+              {xfmr.primaryVoltage.replace('V', '')}
+            </text>
+          );
+          // Secondary voltage label
+          elements.push(
+            <text key={`xfmr-sec-lbl-${col.p.id}`} x={spCx} y={xfmrY + 8}
+              textAnchor="middle" style={{ font: FONT_SMALL }} fontWeight="600" fill="#92400e">
+              {xfmr.secondaryVoltage.replace('V', '')}
+            </text>
+          );
+
+          // kVA label to the right
+          if (kva > 0) {
+            const primaryFLA = transformerFLA(kva, xfmr.primaryVoltage);
+            const secondaryFLA = transformerFLA(kva, xfmr.secondaryVoltage);
+            elements.push(
+              <g key={`xfmr-kva-${col.p.id}`}>
+                <text x={spCx + XFMR_R + 4} y={xfmrY - 4}
+                  style={{ font: FONT_SMALL }} fill="#b45309">
+                  {kva}kVA
+                </text>
+                <text x={spCx + XFMR_R + 4} y={xfmrY + 6}
+                  style={{ font: FONT_SMALL }} fill="#92400e">
+                  {primaryFLA.toFixed(0)}A/{secondaryFLA.toFixed(0)}A
+                </text>
+              </g>
+            );
+          }
+
+          // Line from transformer to sub-panel
+          nextY = xfmrY + XFMR_R + 6;
+          elements.push(
+            <line key={`line-xfmr-sub-${col.p.id}`} x1={spCx} y1={xfmrY + XFMR_R - 1} x2={spCx} y2={nextY}
+              stroke={LINE_COLOR} strokeWidth={1.5} />
+          );
+        } else {
+          // Line from feed breaker to sub-panel (no transformer)
+          nextY = breakerY + 16;
+          elements.push(
+            <line key={`line-to-sub-${col.p.id}`} x1={spCx} y1={breakerY + 4} x2={spCx} y2={nextY}
+              stroke={LINE_COLOR} strokeWidth={1.5} />
+          );
+        }
 
         // Recursively render sub-panel
-        const deepestY = renderPanel(col.p, spCx, subPanelY, true);
+        const deepestY = renderPanel(col.p, spCx, nextY, true);
         if (deepestY > maxY) maxY = deepestY;
 
         colX += colW;
@@ -356,7 +472,7 @@ export function SingleLineDiagram({ data }: Props) {
   };
 
   return (
-    <fieldset className="diagram-section">
+    <fieldset className="diagram-section" data-diagram-ref="true">
       <legend>Single Line Diagram</legend>
       <div className="diagram-toolbar">
         <button type="button" className="btn-export btn-small" onClick={handleExportSvg}>
@@ -378,6 +494,10 @@ export function SingleLineDiagram({ data }: Props) {
           {elements}
         </svg>
       </div>
+      {/* Expose getSvgDataUrl for PDF export */}
+      <input type="hidden" data-get-svg={JSON.stringify({ fn: 'getSvgDataUrl' })} ref={(el) => {
+        if (el) (el as any).__getSvgDataUrl = getSvgDataUrl;
+      }} />
     </fieldset>
   );
 }

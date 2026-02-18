@@ -213,6 +213,20 @@ legend {
   color: #1e40af;
 }
 
+.panel-badge-xfmr {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Transformer section */
+.transformer-section {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+}
+
 /* kW badge on charger legend */
 .kw-badge {
   display: inline-block;
@@ -542,6 +556,22 @@ legend {
 
 .btn-export:hover {
   background: #047857;
+}
+
+.btn-export-secondary {
+  background: #64748b;
+}
+
+.btn-export-secondary:hover {
+  background: #475569;
+}
+
+.btn-pdf {
+  background: #dc2626;
+}
+
+.btn-pdf:hover {
+  background: #b91c1c;
 }
 
 .btn-clear {

@@ -1,5 +1,9 @@
 import type { MainPanel, Breaker } from '../types';
-import { breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw, chargerVoltage, STANDARD_BREAKER_SIZES } from '../types';
+import {
+  breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw,
+  chargerVoltage, STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
+  getEffectivePanelVoltage, stepDownOptions, transformerFLA,
+} from '../types';
 
 interface Props {
   panel: MainPanel;
@@ -92,19 +96,67 @@ export function PanelHierarchy({
     onUpdatePanel(panel.id, { ...panel, [field]: value });
   };
 
+  // Effective voltage for this panel (may differ from service voltage if transformer)
+  const effectiveVoltage = getEffectivePanelVoltage(panel, allPanels, serviceVoltage);
+
+  // Parent panel's effective voltage (for transformer step-down options)
+  const parentPanel = panel.parentPanelId
+    ? allPanels.find((p) => p.id === panel.parentPanelId)
+    : undefined;
+  const parentVoltage = parentPanel
+    ? getEffectivePanelVoltage(parentPanel, allPanels, serviceVoltage)
+    : serviceVoltage;
+  const stepDownOpts = panel.parentPanelId ? stepDownOptions(parentVoltage) : [];
+
   const childPanels = allPanels.filter((p) => p.parentPanelId === panel.id);
 
   const spacesUsed = totalSpacesUsed(panel.breakers);
   const totalSp = Number(panel.totalSpaces) || 0;
   const availableSpaces = totalSp - spacesUsed;
 
-  const voltageOptions = voltageOptionsForService(serviceVoltage);
+  const voltageOptions = voltageOptionsForService(effectiveVoltage);
 
   const totalBreakerAmps = panel.breakers
     .filter((b) => b.type === 'load' || b.type === 'evcharger')
     .reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
 
   const depthClass = depth > 0 ? 'panel-nested' : '';
+
+  // Transformer math
+  const hasTransformer = !!panel.transformer;
+  const xfKva = Number(panel.transformer?.kva) || 0;
+  const xfPrimaryFLA = hasTransformer ? transformerFLA(xfKva, panel.transformer!.primaryVoltage) : 0;
+  const xfSecondaryFLA = hasTransformer ? transformerFLA(xfKva, panel.transformer!.secondaryVoltage) : 0;
+
+  const handleVoltageSystemChange = (value: string) => {
+    if (value === '' || value === parentVoltage) {
+      // Same as parent - remove transformer
+      onUpdatePanel(panel.id, {
+        ...panel,
+        transformer: undefined,
+        panelVoltage: undefined,
+      });
+    } else {
+      // Step down via transformer
+      onUpdatePanel(panel.id, {
+        ...panel,
+        transformer: {
+          kva: panel.transformer?.kva || '',
+          primaryVoltage: parentVoltage,
+          secondaryVoltage: value,
+        },
+        panelVoltage: value,
+      });
+    }
+  };
+
+  const handleTransformerKva = (kva: string) => {
+    if (!panel.transformer) return;
+    onUpdatePanel(panel.id, {
+      ...panel,
+      transformer: { ...panel.transformer, kva },
+    });
+  };
 
   return (
     <div className={`panel-hierarchy ${depthClass}`}>
@@ -113,12 +165,104 @@ export function PanelHierarchy({
           {panel.panelName || `Panel ${index + 1}`}
           {panel.parentPanelId && <span className="panel-badge">Sub Panel</span>}
           {!panel.parentPanelId && depth === 0 && <span className="panel-badge panel-badge-mdp">MDP</span>}
+          {hasTransformer && (
+            <span className="panel-badge panel-badge-xfmr">XFMR {effectiveVoltage}</span>
+          )}
           {canRemove && (
             <button type="button" className="btn-remove legend-remove" onClick={() => onRemovePanel(panel.id)}>
               Remove
             </button>
           )}
         </legend>
+
+        {/* Transformer voltage selector for sub-panels */}
+        {panel.parentPanelId && stepDownOpts.length > 0 && (
+          <div className="transformer-section">
+            <div className="form-grid" style={{ marginBottom: '0.75rem' }}>
+              <label>
+                Panel Voltage
+                <select
+                  value={panel.transformer?.secondaryVoltage || ''}
+                  onChange={(e) => handleVoltageSystemChange(e.target.value)}
+                >
+                  <option value="">Same as parent ({parentVoltage})</option>
+                  {stepDownOpts.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              {hasTransformer && (
+                <>
+                  <label>
+                    Transformer kVA
+                    <select
+                      value={STANDARD_KVA_SIZES.map(String).includes(panel.transformer!.kva) ? panel.transformer!.kva : (panel.transformer!.kva ? '__custom__' : '')}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          handleTransformerKva(panel.transformer!.kva || '');
+                        } else {
+                          handleTransformerKva(e.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">Select kVA...</option>
+                      {STANDARD_KVA_SIZES.map((k) => (
+                        <option key={k} value={String(k)}>{k} kVA</option>
+                      ))}
+                      <option value="__custom__">Custom...</option>
+                    </select>
+                    {panel.transformer!.kva && !STANDARD_KVA_SIZES.map(String).includes(panel.transformer!.kva) && (
+                      <input
+                        type="number"
+                        value={panel.transformer!.kva}
+                        onChange={(e) => handleTransformerKva(e.target.value)}
+                        placeholder="Enter kVA"
+                        min="0"
+                        style={{ marginTop: '0.25rem' }}
+                      />
+                    )}
+                  </label>
+
+                  <label>
+                    Primary ({panel.transformer!.primaryVoltage})
+                    <input
+                      type="text"
+                      value={xfPrimaryFLA > 0 ? `${xfPrimaryFLA.toFixed(1)}A FLA` : '--'}
+                      readOnly
+                      className="computed-field"
+                    />
+                  </label>
+                  <label>
+                    Secondary ({panel.transformer!.secondaryVoltage})
+                    <input
+                      type="text"
+                      value={xfSecondaryFLA > 0 ? `${xfSecondaryFLA.toFixed(1)}A FLA` : '--'}
+                      readOnly
+                      className="computed-field"
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            {/* Transformer warnings */}
+            {hasTransformer && xfKva > 0 && xfSecondaryFLA > 0 && (
+              <>
+                {Number(panel.mainBreakerAmps) > 0 && Number(panel.mainBreakerAmps) > Math.ceil(xfSecondaryFLA) && (
+                  <div className="calc-alert warning" style={{ marginBottom: '0.5rem' }}>
+                    Main breaker ({panel.mainBreakerAmps}A) exceeds transformer secondary FLA ({xfSecondaryFLA.toFixed(1)}A).
+                  </div>
+                )}
+                {totalBreakerAmps > xfSecondaryFLA && (
+                  <div className="calc-alert warning" style={{ marginBottom: '0.5rem' }}>
+                    Total breaker load ({totalBreakerAmps}A) exceeds transformer capacity ({xfSecondaryFLA.toFixed(1)}A secondary).
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         <div className="form-grid">
           <label>
@@ -214,7 +358,7 @@ export function PanelHierarchy({
                     key={breaker.id}
                     breaker={breaker}
                     panelId={panel.id}
-                    serviceVoltage={serviceVoltage}
+                    serviceVoltage={effectiveVoltage}
                     voltageOptions={voltageOptions}
                     onUpdate={onUpdateBreaker}
                     onRemove={onRemoveBreaker}
@@ -397,7 +541,7 @@ function BreakerRow({
                 >
                   <option value="">Select...</option>
                   <option value="Level 1">Level 1 (120V)</option>
-                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'})</option>
+                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : serviceVoltage === '277/480V' ? '480V' : '240V'})</option>
                 </select>
               </label>
               <label>

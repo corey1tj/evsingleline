@@ -3,7 +3,7 @@ import {
   breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw,
   chargerVoltage, STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
   getEffectivePanelVoltage, stepDownOptions, transformerFLA,
-  minBreakerAmpsForEv, nextBreakerSize,
+  minBreakerAmpsForEv, nextBreakerSize, breakerKva, evChargerKw,
 } from '../types';
 
 interface Props {
@@ -22,24 +22,97 @@ interface Props {
   depth: number;
 }
 
-const COMMON_LOADS = [
-  'HVAC / Heat Pump',
-  'Air Conditioner',
-  'Electric Range / Oven',
-  'Electric Dryer',
-  'Water Heater',
-  'Pool / Spa Pump',
-  'Well Pump',
-  'Electric Furnace',
-  'Lighting',
-  'Receptacles',
-  'Dishwasher',
-  'Garbage Disposal',
-  'Microwave',
-  'Washer',
-  'Garage Door Opener',
-  'Other',
+const LOAD_CATEGORIES: { category: string; loads: string[] }[] = [
+  {
+    category: 'HVAC / Mechanical',
+    loads: [
+      'HVAC / Heat Pump',
+      'Air Conditioner',
+      'RTU (Rooftop Unit)',
+      'AHU (Air Handler)',
+      'Chiller',
+      'Boiler',
+      'Compressor',
+      'Electric Furnace',
+      'Exhaust Fan',
+      'Supply Fan',
+      'VAV Box',
+      'Unit Heater',
+      'Make-Up Air Unit',
+    ],
+  },
+  {
+    category: 'Lighting',
+    loads: [
+      'Lighting',
+      'Emergency Lighting',
+      'Exterior Lighting',
+      'Parking Lot Lighting',
+      'Sign / Signage',
+    ],
+  },
+  {
+    category: 'Power / Receptacles',
+    loads: [
+      'Receptacles',
+      'Motor',
+      'Welding Outlet',
+      'UPS',
+      'Server / IT Equipment',
+      'Elevator',
+      'Escalator',
+      'Conveyor',
+      'Garage Door Opener',
+    ],
+  },
+  {
+    category: 'Kitchen / Food Service',
+    loads: [
+      'Electric Range / Oven',
+      'Commercial Oven',
+      'Walk-in Cooler',
+      'Walk-in Freezer',
+      'Ice Machine',
+      'Dishwasher',
+      'Garbage Disposal',
+      'Microwave',
+      'Hood Exhaust Fan',
+    ],
+  },
+  {
+    category: 'Plumbing / Fire',
+    loads: [
+      'Water Heater',
+      'Booster Pump',
+      'Sump Pump',
+      'Well Pump',
+      'Pool / Spa Pump',
+      'Fire Pump',
+      'Jockey Pump',
+    ],
+  },
+  {
+    category: 'Life Safety / Controls',
+    loads: [
+      'Fire Alarm Panel',
+      'Security System',
+      'BMS / Building Automation',
+      'Access Control',
+      'Smoke Detection',
+      'PA / Intercom',
+    ],
+  },
+  {
+    category: 'Residential',
+    loads: [
+      'Electric Dryer',
+      'Washer',
+    ],
+  },
 ];
+
+// Flat list of all load names (for validation checks)
+const COMMON_LOADS = LOAD_CATEGORIES.flatMap((c) => c.loads).concat(['Other']);
 
 const COMMON_PANEL_AMPS = ['100', '125', '150', '200', '225', '300', '400', '600', '800', '1000', '1200'];
 
@@ -112,14 +185,22 @@ export function PanelHierarchy({
   const childPanels = allPanels.filter((p) => p.parentPanelId === panel.id);
 
   const spacesUsed = totalSpacesUsed(panel.breakers);
+  const spareCount = Number(panel.spareSpaces) || 0;
   const totalSp = Number(panel.totalSpaces) || 0;
-  const availableSpaces = totalSp - spacesUsed;
+  const accountedSpaces = spacesUsed + spareCount;
+  const availableSpaces = totalSp - accountedSpaces;
 
   const voltageOptions = voltageOptionsForService(effectiveVoltage);
 
   const totalBreakerAmps = panel.breakers
     .filter((b) => b.type === 'load' || b.type === 'evcharger')
     .reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
+
+  const totalPanelKw = panel.breakers.reduce((sum, b) => {
+    if (b.type === 'subpanel') return sum;
+    if (b.type === 'evcharger') return sum + evChargerKw(b);
+    return sum + breakerKva(b);
+  }, 0);
 
   const depthClass = depth > 0 ? 'panel-nested' : '';
 
@@ -332,12 +413,22 @@ export function PanelHierarchy({
             />
           </label>
           <label>
-            Spaces Used / Available
+            Unused / Spare Spaces
+            <input
+              type="number"
+              value={panel.spareSpaces || ''}
+              onChange={(e) => updateField('spareSpaces', e.target.value)}
+              placeholder="0"
+              min="0"
+            />
+          </label>
+          <label>
+            Spaces Accounted
             <input
               type="text"
-              value={totalSp > 0 ? `${spacesUsed} used / ${availableSpaces} available` : '--'}
+              value={totalSp > 0 ? `${accountedSpaces} of ${totalSp} (${spacesUsed} breakers + ${spareCount} spare)` : '--'}
               readOnly
-              className={`computed-field${totalSp > 0 && spacesUsed !== totalSp ? ' spaces-mismatch' : ''}`}
+              className={`computed-field${totalSp > 0 && accountedSpaces !== totalSp ? ' spaces-mismatch' : ''}`}
             />
           </label>
         </div>
@@ -347,7 +438,8 @@ export function PanelHierarchy({
             <h4>Breakers</h4>
             <span className="breaker-summary">
               {totalBreakerAmps > 0 && `${totalBreakerAmps}A total load`}
-              {totalSp > 0 && ` | ${spacesUsed}/${totalSp} spaces`}
+              {totalPanelKw > 0 && ` / ${totalPanelKw.toFixed(1)} kW`}
+              {totalSp > 0 && ` | ${accountedSpaces}/${totalSp} spaces`}
             </span>
           </div>
 
@@ -361,6 +453,7 @@ export function PanelHierarchy({
                   <th>Voltage</th>
                   <th>Sp</th>
                   <th>Type</th>
+                  <th>kW</th>
                   <th>Load</th>
                   <th>Status</th>
                   <th></th>
@@ -401,7 +494,7 @@ export function PanelHierarchy({
           )}
           {totalSp > 0 && availableSpaces > 0 && (
             <div className="calc-alert caution" style={{ marginTop: '0.5rem' }}>
-              {availableSpaces} space{availableSpaces > 1 ? 's' : ''} unaccounted for ({spacesUsed} of {totalSp} documented).
+              {availableSpaces} space{availableSpaces > 1 ? 's' : ''} unaccounted for ({accountedSpaces} of {totalSp} accounted: {spacesUsed} breakers + {spareCount} spare).
             </div>
           )}
         </div>
@@ -489,9 +582,14 @@ function BreakerRow({
                 }}
               >
                 <option value="">Select...</option>
-                {COMMON_LOADS.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                {LOAD_CATEGORIES.map((cat) => (
+                  <optgroup key={cat.category} label={cat.category}>
+                    {cat.loads.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </optgroup>
                 ))}
+                <option value="Other">Other</option>
               </select>
               {!COMMON_LOADS.includes(breaker.label) && (
                 <input
@@ -541,6 +639,12 @@ function BreakerRow({
             <span className="type-badge type-load">Load</span>
           )}
         </td>
+        <td className="kw-cell">
+          {isSubPanel ? '--' : isEv
+            ? (evChargerKw(breaker) > 0 ? `${evChargerKw(breaker).toFixed(1)}` : '--')
+            : (breakerKva(breaker) > 0 ? `${breakerKva(breaker).toFixed(1)}` : '--')
+          }
+        </td>
         <td>
           {!isSubPanel && (
             <select
@@ -573,7 +677,7 @@ function BreakerRow({
       {isEv && (
         <tr className="breaker-row-ev-detail">
           <td></td>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <div className="ev-detail-grid">
               <label>
                 Level

@@ -4,7 +4,7 @@ import type { SingleLineData, MainPanel } from '../types';
 import {
   breakerSpaces, totalSpacesUsed, calcKw,
   getEffectivePanelVoltage, transformerFLA,
-  necDemandAmps, evChargerKw,
+  necDemandAmps, evChargerKw, breakerKva,
 } from '../types';
 
 interface Props {
@@ -200,11 +200,13 @@ export function PdfExportButton({ data }: Props) {
       // Spaces
       const totalSp = Number(panel.totalSpaces) || 0;
       const used = totalSpacesUsed(panel.breakers);
+      const spare = Number(panel.spareSpaces) || 0;
+      const accounted = used + spare;
       if (totalSp > 0) {
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`Spaces: ${used}/${totalSp} used (${totalSp - used} available)`, 14 + indent * 4, y);
+        doc.text(`Spaces: ${accounted}/${totalSp} accounted (${used} breakers${spare > 0 ? ` + ${spare} spare` : ''})`, 14 + indent * 4, y);
         y += 5;
       }
 
@@ -231,6 +233,9 @@ export function PdfExportButton({ data }: Props) {
           }
 
           const loadTypeLabel = b.type === 'subpanel' ? '--' : (b.loadType === 'continuous' ? 'Cont' : 'Non-C');
+          const kwVal = b.type === 'subpanel' ? '--' : b.type === 'evcharger'
+            ? (evChargerKw(b) > 0 ? `${evChargerKw(b).toFixed(1)}` : '--')
+            : (breakerKva(b) > 0 ? `${breakerKva(b).toFixed(1)}` : '--');
 
           return [
             b.circuitNumber || '--',
@@ -239,6 +244,7 @@ export function PdfExportButton({ data }: Props) {
             `${b.voltage}V`,
             String(spaces),
             typeLabel,
+            kwVal,
             loadTypeLabel,
             b.condition === 'new' ? 'NEW' : 'Existing',
             extra,
@@ -248,7 +254,7 @@ export function PdfExportButton({ data }: Props) {
         autoTable(doc, {
           startY: y,
           margin: { left: 14 + indent * 4 },
-          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'Load', 'Status', 'Notes']],
+          head: [['Ckt', 'Label', 'Breaker', 'Voltage', 'Sp', 'Type', 'kW', 'Load', 'Status', 'Notes']],
           body: breakerRows,
           theme: 'striped',
           styles: {
@@ -266,14 +272,15 @@ export function PdfExportButton({ data }: Props) {
           },
           columnStyles: {
             0: { cellWidth: 12 },
-            1: { cellWidth: 30 },
+            1: { cellWidth: 26 },
             2: { cellWidth: 14 },
             3: { cellWidth: 14 },
             4: { cellWidth: 8 },
             5: { cellWidth: 18 },
-            6: { cellWidth: 12 },
-            7: { cellWidth: 16 },
-            8: { cellWidth: 18 },
+            6: { cellWidth: 12, halign: 'right' },
+            7: { cellWidth: 12 },
+            8: { cellWidth: 14 },
+            9: { cellWidth: 14 },
           },
         });
 

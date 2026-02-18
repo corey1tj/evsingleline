@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { breakerSpaces, totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, necDemandAmps, evChargerKw } from '../types';
+import { breakerSpaces, totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, necDemandAmps, evChargerKw, breakerKva } from '../types';
 import { PdfExportButton } from './PdfExportButton';
 
 interface Props {
@@ -31,8 +31,9 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
 
   const totalSp = Number(panel.totalSpaces) || 0;
   const used = totalSpacesUsed(panel.breakers);
-  const available = totalSp - used;
-  lines.push(`${indent}Spaces: ${used} used / ${available} available of ${totalSp} total`);
+  const spare = Number(panel.spareSpaces) || 0;
+  const accounted = used + spare;
+  lines.push(`${indent}Spaces: ${accounted} of ${totalSp} accounted (${used} breakers${spare > 0 ? ` + ${spare} spare` : ''})`);
 
   if (panel.breakers.length > 0) {
     lines.push(`${indent}Breakers:`);
@@ -53,7 +54,8 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
         if (b.wireSize) lines.push(`${indent}    Wire: ${b.wireSize}, ${b.wireRunFeet || '?'} ft, ${b.conduitType || '?'}`);
         if (b.installLocation) lines.push(`${indent}    Location: ${b.installLocation}`);
       } else {
-        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)${loadLabel}${cond}`);
+        const bkw = breakerKva(b);
+        lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp)${bkw > 0 ? ` ${bkw.toFixed(1)}kW` : ''}${loadLabel}${cond}`);
       }
     }
   }

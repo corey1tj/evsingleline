@@ -372,6 +372,14 @@ legend {
   color: #475569;
 }
 
+.kw-cell {
+  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
 .breaker-row-subpanel {
   background: #faf5ff;
 }

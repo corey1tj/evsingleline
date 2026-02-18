@@ -54,7 +54,9 @@ export function LoadCalculation({ data }: Props) {
   const panelSummaries = data.panels.map((p) => {
     const totalSp = Number(p.totalSpaces) || 0;
     const used = totalSpacesUsed(p.breakers);
-    const available = totalSp - used;
+    const spare = Number(p.spareSpaces) || 0;
+    const accounted = used + spare;
+    const available = totalSp - accounted;
     const loadAmps = panelLoadAmps(p);
     const subFeedAmps = panelSubPanelFeedAmps(p);
     const mainBreaker = Number(p.mainBreakerAmps) || 0;
@@ -72,6 +74,8 @@ export function LoadCalculation({ data }: Props) {
       panel: p,
       totalSpaces: totalSp,
       spacesUsed: used,
+      spare,
+      accounted,
       available,
       loadAmps,
       subFeedAmps,
@@ -372,7 +376,7 @@ export function LoadCalculation({ data }: Props) {
             <div key={ps.panel.id} className={`calc-row sub ${!ok ? 'warning' : unaccounted ? 'caution' : ''}`}>
               <span>{ps.panel.panelName || `Panel ${i + 1}`}</span>
               <span>
-                {ps.spacesUsed}/{ps.totalSpaces} used
+                {ps.accounted}/{ps.totalSpaces} accounted ({ps.spacesUsed} breakers{ps.spare > 0 ? ` + ${ps.spare} spare` : ''})
                 {!ok ? ' - OVER' : ''}
                 {unaccounted ? ` - ${ps.available} unaccounted` : ''}
               </span>

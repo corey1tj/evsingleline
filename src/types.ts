@@ -45,6 +45,7 @@ export interface MainPanel {
   mainBreakerAmps: string;
   busRatingAmps: string;
   totalSpaces: string;
+  spareSpaces: string;       // unused / blank breaker spaces (user-entered)
   condition: Condition;
   parentPanelId?: string;
   feedBreakerId?: string;

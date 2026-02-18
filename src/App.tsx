@@ -23,6 +23,7 @@ function createPanel(overrides?: Partial<MainPanel>): MainPanel {
     mainBreakerAmps: '',
     busRatingAmps: '',
     totalSpaces: '',
+    spareSpaces: '',
     condition: 'existing',
     breakers: [],
     ...overrides,
@@ -73,6 +74,7 @@ function migrateData(parsed: any): SingleLineData {
     for (const p of parsed.panels) {
       if (!p.breakers) p.breakers = [];
       if (!p.condition) p.condition = 'existing';
+      if (p.spareSpaces === undefined) p.spareSpaces = '';
       for (const b of p.breakers) {
         if (!b.condition) b.condition = b.type === 'evcharger' ? 'new' : 'existing';
         if (!b.loadType) b.loadType = b.type === 'evcharger' ? 'continuous' : 'noncontinuous';

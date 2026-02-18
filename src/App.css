@@ -1,5 +1,5 @@
 .app {
-  max-width: 860px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 1rem;
 }
@@ -81,57 +81,12 @@ legend {
   resize: vertical;
 }
 
-/* Loads table */
-.loads-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
-
-.loads-table th {
-  text-align: left;
-  padding: 0.5rem;
-  border-bottom: 2px solid #e2e8f0;
-  color: #475569;
-  font-weight: 600;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.loads-table td {
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: top;
-}
-
-.loads-table select,
-.loads-table input {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-family: inherit;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.loads-table select:focus,
-.loads-table input:focus {
-  outline: none;
-  border-color: #2563eb;
-}
-
-.loads-footer {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loads-total {
-  color: #475569;
-  font-size: 0.9rem;
+/* Computed / read-only fields */
+.computed-field {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 500;
+  cursor: default;
 }
 
 /* Buttons */
@@ -150,6 +105,19 @@ legend {
   background: #1d4ed8;
 }
 
+.btn-small {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.btn-subpanel {
+  background: #7c3aed;
+}
+
+.btn-subpanel:hover {
+  background: #6d28d9;
+}
+
 .btn-remove {
   background: none;
   border: 1px solid #ef4444;
@@ -162,6 +130,13 @@ legend {
 
 .btn-remove:hover {
   background: #fef2f2;
+}
+
+.btn-remove-sm {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  border-radius: 3px;
+  line-height: 1;
 }
 
 /* Multi-section (panels, chargers) */
@@ -192,14 +167,183 @@ legend {
   vertical-align: middle;
 }
 
-.calc-row.sub {
-  padding-left: 1rem;
-  font-size: 0.85rem;
+/* Panel hierarchy nesting */
+.panel-hierarchy {
+  position: relative;
+}
+
+.panel-nested {
+  margin-left: 1.5rem;
+  padding-left: 0.5rem;
+  border-left: 2px dashed #a78bfa;
+}
+
+.panel-nested::before {
+  content: '';
+  position: absolute;
+  top: 1.5rem;
+  left: -0.5rem;
+  width: 0.5rem;
+  height: 0;
+  border-top: 2px dashed #a78bfa;
+}
+
+.sub-panel-fieldset {
+  border-left: 3px solid #7c3aed;
+  background: #faf5ff;
+}
+
+/* Panel badges */
+.panel-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.panel-badge-mdp {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* kW badge on charger legend */
+.kw-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  background: #d1fae5;
+  color: #047857;
+}
+
+/* Breakers section inside panel */
+.breakers-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.breakers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.breakers-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #334155;
+  font-weight: 600;
+}
+
+.breaker-summary {
+  font-size: 0.8rem;
   color: #64748b;
 }
 
-.calc-detail {
-  padding-left: 0.25rem;
+.breakers-footer {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Breakers table */
+.breakers-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.breakers-table th {
+  text-align: left;
+  padding: 0.4rem 0.35rem;
+  border-bottom: 2px solid #e2e8f0;
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.breakers-table td {
+  padding: 0.3rem 0.35rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.breakers-table select,
+.breakers-table input {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.breakers-table select:focus,
+.breakers-table input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.ckt-input {
+  width: 45px !important;
+  text-align: center;
+}
+
+.amps-input {
+  width: 65px !important;
+}
+
+.spaces-cell {
+  text-align: center;
+  font-weight: 600;
+  color: #475569;
+}
+
+.breaker-row-subpanel {
+  background: #faf5ff;
+}
+
+.subpanel-label {
+  font-weight: 600;
+  color: #7c3aed;
+  font-size: 0.85rem;
+}
+
+/* Type badges */
+.type-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+.type-load {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.type-subpanel {
+  background: #ede9fe;
+  color: #7c3aed;
 }
 
 /* Load calculation */
@@ -208,7 +352,7 @@ legend {
 }
 
 .calc-grid {
-  max-width: 400px;
+  max-width: 500px;
 }
 
 .calc-row {
@@ -221,6 +365,16 @@ legend {
 .calc-row.total {
   font-weight: 700;
   font-size: 1.05rem;
+}
+
+.calc-row.sub {
+  padding-left: 1rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.calc-detail {
+  padding-left: 0.25rem;
 }
 
 .calc-row.ok span:last-child {
@@ -236,6 +390,11 @@ legend {
 .calc-row.warning span:last-child {
   color: #dc2626;
   font-weight: 600;
+}
+
+.calc-panel-tag {
+  font-size: 0.75rem;
+  color: #94a3b8;
 }
 
 .calc-alert {
@@ -333,7 +492,19 @@ legend {
     flex-direction: column;
   }
 
-  .loads-table {
-    font-size: 0.8rem;
+  .breakers-table {
+    font-size: 0.75rem;
+  }
+
+  .panel-nested {
+    margin-left: 0.75rem;
+  }
+
+  .ckt-input {
+    width: 35px !important;
+  }
+
+  .amps-input {
+    width: 50px !important;
   }
 }

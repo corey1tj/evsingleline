@@ -1,22 +1,40 @@
-import type { EVChargerInfo } from '../types';
+import type { EVChargerInfo, MainPanel } from '../types';
+import { calcKw } from '../types';
 
 interface Props {
   data: EVChargerInfo;
   index: number;
+  panels: MainPanel[];
+  serviceVoltage: string;
   canRemove: boolean;
   onChange: (data: EVChargerInfo) => void;
   onRemove: () => void;
 }
 
-export function EVChargerForm({ data, index, canRemove, onChange, onRemove }: Props) {
+function chargerVoltage(level: string, serviceVoltage: string): number {
+  if (level === 'Level 1') return 120;
+  // Level 2 voltage depends on service
+  switch (serviceVoltage) {
+    case '120/208V': return 208;
+    case '277/480V': return 480;
+    case '120/240V':
+    default: return 240;
+  }
+}
+
+export function EVChargerForm({ data, index, panels, serviceVoltage, canRemove, onChange, onRemove }: Props) {
   const update = (field: keyof EVChargerInfo, value: string) => {
     onChange({ ...data, [field]: value });
   };
+
+  const voltage = chargerVoltage(data.chargerLevel, serviceVoltage);
+  const kw = calcKw(String(voltage), data.chargerAmps);
 
   return (
     <fieldset className="multi-item">
       <legend>
         {data.chargerLabel || `EV Charger ${index + 1}`}
+        {kw > 0 && <span className="kw-badge">{kw.toFixed(1)} kW</span>}
         {canRemove && (
           <button type="button" className="btn-remove legend-remove" onClick={onRemove}>
             Remove
@@ -34,6 +52,20 @@ export function EVChargerForm({ data, index, canRemove, onChange, onRemove }: Pr
           />
         </label>
         <label>
+          Connected Panel
+          <select
+            value={data.panelId}
+            onChange={(e) => update('panelId', e.target.value)}
+          >
+            <option value="">Select...</option>
+            {panels.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.panelName || `Panel ${p.id}`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           Charger Level
           <select
             value={data.chargerLevel}
@@ -41,7 +73,7 @@ export function EVChargerForm({ data, index, canRemove, onChange, onRemove }: Pr
           >
             <option value="">Select...</option>
             <option value="Level 1">Level 1 (120V)</option>
-            <option value="Level 2">Level 2 (240V)</option>
+            <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'})</option>
           </select>
         </label>
         <label>
@@ -77,6 +109,15 @@ export function EVChargerForm({ data, index, canRemove, onChange, onRemove }: Pr
             <option value="80">80A</option>
             <option value="100">100A</option>
           </select>
+        </label>
+        <label>
+          kW Output
+          <input
+            type="text"
+            value={kw > 0 ? `${kw.toFixed(1)} kW (${voltage}V x ${data.chargerAmps}A)` : '--'}
+            readOnly
+            className="computed-field"
+          />
         </label>
         <label>
           Wire Run (feet)

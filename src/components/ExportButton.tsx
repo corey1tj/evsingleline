@@ -1,11 +1,54 @@
-import type { SingleLineData } from '../types';
+import type { SingleLineData, MainPanel } from '../types';
+import { breakerSpaces, totalSpacesUsed, calcKw } from '../types';
 
 interface Props {
   data: SingleLineData;
 }
 
+function chargerVoltage(level: string, serviceVoltage: string): number {
+  if (level === 'Level 1') return 120;
+  switch (serviceVoltage) {
+    case '120/208V': return 208;
+    case '277/480V': return 480;
+    default: return 240;
+  }
+}
+
+function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, serviceVoltage: string, lines: string[]) {
+  const label = panel.panelName || 'Panel';
+  lines.push(`${indent}${label.toUpperCase()}`);
+  lines.push(`${indent}${'-'.repeat(30)}`);
+  lines.push(`${indent}Location: ${panel.panelLocation}`);
+  lines.push(`${indent}Make/Model: ${panel.panelMake} ${panel.panelModel}`);
+  lines.push(`${indent}Main Breaker: ${panel.mainBreakerAmps}A`);
+  lines.push(`${indent}Bus Rating: ${panel.busRatingAmps}A`);
+
+  const totalSp = Number(panel.totalSpaces) || 0;
+  const used = totalSpacesUsed(panel.breakers);
+  const available = totalSp - used;
+  lines.push(`${indent}Spaces: ${used} used / ${available} available of ${totalSp} total`);
+
+  if (panel.breakers.length > 0) {
+    lines.push(`${indent}Breakers:`);
+    for (const b of panel.breakers) {
+      const spaces = breakerSpaces(b.voltage);
+      const typeTag = b.type === 'subpanel' ? ' [SUB PANEL FEED]' : '';
+      lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Unnamed'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces} space${spaces > 1 ? 's' : ''})${typeTag}`);
+    }
+  }
+
+  lines.push('');
+
+  // Recurse into child panels
+  const children = allPanels.filter((p) => p.parentPanelId === panel.id);
+  for (const child of children) {
+    formatPanel(child, allPanels, indent + '  ', serviceVoltage, lines);
+  }
+}
+
 function formatData(data: SingleLineData): string {
   const lines: string[] = [];
+  const sv = data.serviceEntrance.serviceVoltage;
 
   lines.push('EV CHARGER INSTALLATION - ELECTRICAL ONE-LINE SURVEY');
   lines.push('='.repeat(55));
@@ -32,38 +75,30 @@ function formatData(data: SingleLineData): string {
   lines.push(`Meter #: ${data.serviceEntrance.meterNumber}`);
   lines.push('');
 
-  for (let i = 0; i < data.panels.length; i++) {
-    const panel = data.panels[i];
-    const label = panel.panelName || `Panel ${i + 1}`;
-    lines.push(label.toUpperCase());
-    lines.push('-'.repeat(30));
-    lines.push(`Location: ${panel.panelLocation}`);
-    lines.push(`Make/Model: ${panel.panelMake} ${panel.panelModel}`);
-    lines.push(`Main Breaker: ${panel.mainBreakerAmps}A`);
-    lines.push(`Bus Rating: ${panel.busRatingAmps}A`);
-    lines.push(`Spaces: ${panel.availableSpaces} available of ${panel.totalSpaces} total`);
-    lines.push('');
-  }
-
-  if (data.existingLoads.length > 0) {
-    lines.push('EXISTING LOADS');
-    lines.push('-'.repeat(30));
-    for (const load of data.existingLoads) {
-      lines.push(`  ${load.name}: ${load.breakerAmps}A @ ${load.voltage}V`);
-    }
-    const totalAmps = data.existingLoads.reduce((s, l) => s + (Number(l.breakerAmps) || 0), 0);
-    lines.push(`  TOTAL: ${totalAmps}A`);
-    lines.push('');
+  // Render panel hierarchy starting from root panels
+  const rootPanels = data.panels.filter((p) => !p.parentPanelId);
+  for (const panel of rootPanels) {
+    formatPanel(panel, data.panels, '', sv, lines);
   }
 
   for (let i = 0; i < data.evChargers.length; i++) {
     const charger = data.evChargers[i];
     const label = charger.chargerLabel || `EV Charger ${i + 1}`;
+    const panelName = data.panels.find((p) => p.id === charger.panelId)?.panelName || '';
+    const voltage = chargerVoltage(charger.chargerLevel, sv);
+    const kw = calcKw(String(voltage), charger.chargerAmps);
+
     lines.push(`PROPOSED ${label.toUpperCase()}`);
     lines.push('-'.repeat(30));
     lines.push(`Level: ${charger.chargerLevel}`);
     lines.push(`Charger Amps: ${charger.chargerAmps}A`);
     lines.push(`Breaker Size: ${charger.breakerSize}A`);
+    if (kw > 0) {
+      lines.push(`kW Output: ${kw.toFixed(1)} kW (${voltage}V x ${charger.chargerAmps}A)`);
+    }
+    if (panelName) {
+      lines.push(`Connected Panel: ${panelName}`);
+    }
     lines.push(`Wire Run: ${charger.wireRunFeet} ft`);
     lines.push(`Wire Size: ${charger.wireSize}`);
     lines.push(`Conduit: ${charger.conduitType}`);

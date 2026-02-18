@@ -641,7 +641,14 @@ function BreakerRow({
                   circuitNumber = newSpaces > 1 ? `${baseNum},${baseNum + 2}` : String(baseNum);
                 }
               }
-              onUpdate(panelId, breaker.id, { ...breaker, voltage: newVoltage, circuitNumber });
+              // Auto-set charger level when voltage changes on EV breakers
+              let chargerLevel = breaker.chargerLevel;
+              if (isEv) {
+                if (newVoltage === '120') chargerLevel = 'Level 1';
+                else if (newVoltage === '208' || newVoltage === '240') chargerLevel = 'Level 2';
+                else if (newVoltage === '480') chargerLevel = 'Level 3';
+              }
+              onUpdate(panelId, breaker.id, { ...breaker, voltage: newVoltage, circuitNumber, chargerLevel });
             }}
           >
             {voltageOptions.map((opt) => (

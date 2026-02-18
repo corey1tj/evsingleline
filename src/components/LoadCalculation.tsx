@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize } from '../types';
+import { totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -38,11 +38,7 @@ export function LoadCalculation({ data }: Props) {
   const existingLoadAmps = totalLoadAmps - totalEvBreakerAmps;
 
   const totalEvKw = allEvBreakers.reduce((sum, b) => {
-    const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
-    const effVoltage = panelForBreaker
-      ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
-      : serviceVoltage;
-    const v = chargerVoltage(b.chargerLevel || '', effVoltage, b.chargerVolts);
+    const v = Number(b.voltage) || 0;
     return sum + calcKw(String(v), b.chargerAmps || '');
   }, 0);
 
@@ -197,16 +193,15 @@ export function LoadCalculation({ data }: Props) {
             <div className="calc-detail">
               {allEvBreakers.map((b) => {
                 const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
-                const effVoltage = panelForBreaker
-                  ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
-                  : serviceVoltage;
-                const v = chargerVoltage(b.chargerLevel || '', effVoltage);
+                const v = Number(b.voltage) || 0;
                 const kw = calcKw(String(v), b.chargerAmps || '');
                 const panelName = panelForBreaker?.panelName || '';
+                const ports = Number(b.chargerPorts) || 0;
                 return (
                   <div key={b.id} className="calc-row sub">
                     <span>
                       {b.label || 'EV Charger'}
+                      {ports > 0 && ` (${ports} port${ports > 1 ? 's' : ''})`}
                       {panelName && <span className="calc-panel-tag"> ({panelName})</span>}
                     </span>
                     <span>

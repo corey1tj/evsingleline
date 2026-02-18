@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { breakerSpaces, totalSpacesUsed, calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { breakerSpaces, totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA } from '../types';
 import { PdfExportButton } from './PdfExportButton';
 
 interface Props {
@@ -40,11 +40,13 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
       if (b.type === 'subpanel') {
         lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'Sub Panel'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [SUB PANEL FEED]`);
       } else if (b.type === 'evcharger') {
-        const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage, b.chargerVolts);
+        const v = Number(b.voltage) || 0;
         const kw = calcKw(String(v), b.chargerAmps || '');
+        const ports = Number(b.chargerPorts) || 0;
         lines.push(`${indent}  Ckt ${b.circuitNumber || '?'}: ${b.label || 'EV Charger'} - ${b.amps || '?'}A @ ${b.voltage}V (${spaces}sp) [EV CHARGER${b.chargerLevel === 'Level 3' ? ' DCFC' : ''}]`);
         if (kw > 0) lines.push(`${indent}    kW Output: ${kw.toFixed(1)} kW (${v}V x ${b.chargerAmps}A)`);
         if (b.chargerLevel) lines.push(`${indent}    Level: ${b.chargerLevel}`);
+        if (ports > 0) lines.push(`${indent}    Ports: ${ports}`);
         if (b.wireSize) lines.push(`${indent}    Wire: ${b.wireSize}, ${b.wireRunFeet || '?'} ft, ${b.conduitType || '?'}`);
         if (b.installLocation) lines.push(`${indent}    Location: ${b.installLocation}`);
       } else {

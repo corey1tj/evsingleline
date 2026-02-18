@@ -434,7 +434,8 @@ function BreakerRow({
   const isSubPanel = breaker.type === 'subpanel';
   const isEv = breaker.type === 'evcharger';
 
-  const evVoltage = isEv ? chargerVoltage(breaker.chargerLevel || '', serviceVoltage, breaker.chargerVolts) : 0;
+  // EV charger voltage is simply the breaker voltage
+  const evVoltage = isEv ? Number(breaker.voltage) || 0 : 0;
   const evKw = isEv ? calcKw(String(evVoltage), breaker.chargerAmps || '') : 0;
 
   return (
@@ -539,20 +540,19 @@ function BreakerRow({
                 <select
                   value={breaker.chargerLevel || ''}
                   onChange={(e) => {
-                    update('chargerLevel', e.target.value);
-                    // Clear custom voltage when changing level
-                    if (e.target.value) {
-                      onUpdate(panelId, breaker.id, {
-                        ...breaker,
-                        chargerLevel: e.target.value,
-                        chargerVolts: '',
-                      });
-                    }
+                    const level = e.target.value;
+                    // Auto-set breaker voltage to match level + panel voltage
+                    const autoVolts = level ? String(chargerVoltage(level, serviceVoltage)) : breaker.voltage;
+                    onUpdate(panelId, breaker.id, {
+                      ...breaker,
+                      chargerLevel: level,
+                      voltage: autoVolts,
+                    });
                   }}
                 >
                   <option value="">Select...</option>
                   <option value="Level 1">Level 1 (120V AC)</option>
-                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : serviceVoltage === '277/480V' ? '480V' : '240V'} AC)</option>
+                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'} AC)</option>
                   <option value="Level 3">Level 3 DCFC (480V)</option>
                 </select>
               </label>
@@ -567,13 +567,13 @@ function BreakerRow({
                 />
               </label>
               <label>
-                Charger Volts
+                # Ports
                 <input
                   type="number"
-                  value={breaker.chargerVolts || ''}
-                  onChange={(e) => update('chargerVolts', e.target.value)}
-                  placeholder={`Default: ${evVoltage}V`}
-                  min="0"
+                  value={breaker.chargerPorts || ''}
+                  onChange={(e) => update('chargerPorts', e.target.value)}
+                  placeholder="e.g. 1"
+                  min="1"
                 />
               </label>
               <label>

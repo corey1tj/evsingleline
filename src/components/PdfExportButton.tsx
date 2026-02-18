@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { SingleLineData, MainPanel } from '../types';
 import {
-  breakerSpaces, totalSpacesUsed, calcKw, chargerVoltage,
+  breakerSpaces, totalSpacesUsed, calcKw,
   getEffectivePanelVoltage, transformerFLA,
 } from '../types';
 
@@ -218,10 +218,14 @@ export function PdfExportButton({ data }: Props) {
           if (b.type === 'subpanel') {
             typeLabel = 'Sub Panel';
           } else if (b.type === 'evcharger') {
-            const v = chargerVoltage(b.chargerLevel || '', effectiveVoltage, b.chargerVolts);
+            const v = Number(b.voltage) || 0;
             const kw = calcKw(String(v), b.chargerAmps || '');
+            const ports = Number(b.chargerPorts) || 0;
             typeLabel = b.chargerLevel === 'Level 3' ? 'DCFC' : 'EV Charger';
-            extra = kw > 0 ? `${kw.toFixed(1)}kW` : '';
+            const parts: string[] = [];
+            if (kw > 0) parts.push(`${kw.toFixed(1)}kW`);
+            if (ports > 0) parts.push(`${ports}port${ports > 1 ? 's' : ''}`);
+            extra = parts.join(', ');
           }
 
           return [
@@ -295,11 +299,7 @@ export function PdfExportButton({ data }: Props) {
     const capacityUsed = panelRating > 0 ? Math.round((totalLoadAmps / panelRating) * 100) : 0;
 
     const totalEvKw = allEvBreakers.reduce((sum, b) => {
-      const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
-      const effV = panelForBreaker
-        ? getEffectivePanelVoltage(panelForBreaker, data.panels, serviceVoltage)
-        : serviceVoltage;
-      const v = chargerVoltage(b.chargerLevel || '', effV, b.chargerVolts);
+      const v = Number(b.voltage) || 0;
       return sum + calcKw(String(v), b.chargerAmps || '');
     }, 0);
 

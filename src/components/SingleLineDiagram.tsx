@@ -1,6 +1,6 @@
 import { useRef, useCallback, type ReactNode } from 'react';
 import type { SingleLineData, MainPanel } from '../types';
-import { calcKw, chargerVoltage, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { calcKw, getEffectivePanelVoltage, transformerFLA } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -284,7 +284,7 @@ export function SingleLineDiagram({ data }: Props) {
               stroke={EV_STROKE} strokeWidth={1} />
           );
 
-          const v = chargerVoltage(col.b.chargerLevel || '', effectiveVoltage, col.b.chargerVolts);
+          const v = Number(col.b.voltage) || 0;
           const kw = calcKw(String(v), col.b.chargerAmps || '');
           const isDcfc = col.b.chargerLevel === 'Level 3';
           const evBoxW = isDcfc ? 40 : 32;
@@ -301,10 +301,16 @@ export function SingleLineDiagram({ data }: Props) {
                   {kw.toFixed(1)}kW
                 </text>
               )}
+              {col.b.chargerPorts && Number(col.b.chargerPorts) > 0 && (
+                <text x={bCx} y={evY + (kw > 0 ? 42 : 32)} textAnchor="middle" style={{ font: FONT_SMALL }} fill="#64748b">
+                  {col.b.chargerPorts} port{Number(col.b.chargerPorts) > 1 ? 's' : ''}
+                </text>
+              )}
             </g>
           );
 
-          const endY = evY + 38;
+          const hasPorts = col.b.chargerPorts && Number(col.b.chargerPorts) > 0;
+          const endY = evY + (hasPorts ? (kw > 0 ? 48 : 38) : 38);
           if (endY > maxY) maxY = endY;
         } else {
           const endY = breakerY + BREAKER_H + 8;

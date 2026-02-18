@@ -23,7 +23,7 @@ export interface Breaker {
   // EV charger fields (populated when type === 'evcharger')
   chargerLevel?: string;
   chargerAmps?: string;
-  chargerVolts?: string;  // custom voltage override (when not using level default)
+  chargerPorts?: string;  // number of ports / connectors
   wireRunFeet?: string;
   wireSize?: string;
   conduitType?: string;
@@ -123,15 +123,14 @@ export function calcKw(voltage: string, amps: string): number {
   return (v * a) / 1000;
 }
 
-/** Get the line-to-line voltage for a given charger level and service type.
- *  If customVolts is provided, it overrides the default. */
-export function chargerVoltage(level: string, serviceVoltage: string, customVolts?: string): number {
-  if (customVolts && Number(customVolts) > 0) return Number(customVolts);
+/** Get the default breaker voltage for a given charger level and panel voltage system.
+ *  Used to auto-set breaker voltage when the charger level changes. */
+export function chargerVoltage(level: string, serviceVoltage: string): number {
   if (level === 'Level 1') return 120;
   if (level === 'Level 3') return 480;
+  // Level 2: 208 or 240 depending on infrastructure
   switch (serviceVoltage) {
     case '120/208V': return 208;
-    case '277/480V': return 480;
     case '120/240V':
     default: return 240;
   }

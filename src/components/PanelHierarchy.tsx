@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import type { MainPanel, Breaker } from '../types';
 import {
-  breakerSpaces, totalSpacesUsed, voltageOptionsForService, calcKw,
-  chargerVoltage, STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
+  breakerSpaces, totalSpacesUsed, voltageOptionsForService,
+  STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
   getEffectivePanelVoltage, stepDownOptions, transformerFLA,
   minBreakerAmpsForEv, nextBreakerSize, breakerKva, evChargerKw, necDemandAmps,
+  WIRE_SIZES, wireSizeIndex, minWireSizeForAmps, isWireUndersized,
 } from '../types';
+import { CHARGER_PROFILES } from '../chargerProfiles';
 
 interface Props {
   panel: MainPanel;
@@ -15,7 +18,7 @@ interface Props {
   onUpdatePanel: (id: string, updated: MainPanel) => void;
   onRemovePanel: (id: string) => void;
   onAddBreaker: (panelId: string) => void;
-  onAddEvCharger: (panelId: string) => void;
+  onAddEvCharger: (panelId: string, profileId?: string) => void;
   onUpdateBreaker: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemoveBreaker: (panelId: string, breakerId: string) => void;
   onAddSubPanel: (parentPanelId: string) => void;
@@ -192,6 +195,8 @@ export function PanelHierarchy({
 
   const voltageOptions = voltageOptionsForService(effectiveVoltage);
 
+  const [showChargerPicker, setShowChargerPicker] = useState(false);
+
   const totalBreakerAmps = panel.breakers
     .filter((b) => b.type === 'load' || b.type === 'evcharger')
     .reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
@@ -364,6 +369,15 @@ export function PanelHierarchy({
             </select>
           </label>
           <label>
+            Voltage System
+            <input
+              type="text"
+              value={effectiveVoltage}
+              readOnly
+              className="computed-field"
+            />
+          </label>
+          <label>
             Panel Name
             <input
               type="text"
@@ -476,7 +490,6 @@ export function PanelHierarchy({
                     key={breaker.id}
                     breaker={breaker}
                     panelId={panel.id}
-                    serviceVoltage={effectiveVoltage}
                     voltageOptions={voltageOptions}
                     onUpdate={onUpdateBreaker}
                     onRemove={onRemoveBreaker}
@@ -490,9 +503,46 @@ export function PanelHierarchy({
             <button type="button" className="btn-add btn-small" onClick={() => onAddBreaker(panel.id)}>
               + Add Breaker
             </button>
-            <button type="button" className="btn-add btn-small btn-ev" onClick={() => onAddEvCharger(panel.id)}>
-              + Add EV Charger
-            </button>
+            {showChargerPicker ? (
+              <select
+                className="charger-profile-select"
+                autoFocus
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    onAddEvCharger(panel.id, val);
+                    setShowChargerPicker(false);
+                  }
+                }}
+                onBlur={() => setShowChargerPicker(false)}
+              >
+                <option value="">Select charger model...</option>
+                {(effectiveVoltage === '120/208V' || effectiveVoltage === '120/240V') && (
+                  <optgroup label="Level 2 AC">
+                    {CHARGER_PROFILES.filter((p) => p.chargerLevel === 'Level 2').map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {effectiveVoltage === '277/480V' && (
+                  <optgroup label="Level 3 DCFC">
+                    {CHARGER_PROFILES.filter((p) => p.chargerLevel === 'Level 3').map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.outputKw ? ` (${p.outputKw} kW)` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Other">
+                  <option value="custom">Custom</option>
+                </optgroup>
+              </select>
+            ) : (
+              <button type="button" className="btn-add btn-small btn-ev" onClick={() => setShowChargerPicker(true)}>
+                + Add EV Charger
+              </button>
+            )}
             <button type="button" className="btn-add btn-small btn-subpanel" onClick={() => onAddSubPanel(panel.id)}>
               + Add Sub Panel
             </button>
@@ -536,14 +586,12 @@ export function PanelHierarchy({
 function BreakerRow({
   breaker,
   panelId,
-  serviceVoltage,
   voltageOptions,
   onUpdate,
   onRemove,
 }: {
   breaker: Breaker;
   panelId: string;
-  serviceVoltage: string;
   voltageOptions: { value: string; label: string }[];
   onUpdate: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemove: (panelId: string, breakerId: string) => void;
@@ -552,13 +600,11 @@ function BreakerRow({
     onUpdate(panelId, breaker.id, { ...breaker, [field]: value });
   };
 
-  const spaces = breakerSpaces(breaker.voltage);
+  const spaces = breakerSpaces(breaker.voltage, breaker.type);
   const isSubPanel = breaker.type === 'subpanel';
   const isEv = breaker.type === 'evcharger';
 
-  // EV charger voltage is simply the breaker voltage
-  const evVoltage = isEv ? Number(breaker.voltage) || 0 : 0;
-  const evKw = isEv ? calcKw(String(evVoltage), breaker.chargerAmps || '') : 0;
+  const evKw = isEv ? evChargerKw(breaker) : 0;
 
   return (
     <>
@@ -632,13 +678,15 @@ function BreakerRow({
             value={breaker.voltage}
             onChange={(e) => {
               const newVoltage = e.target.value;
-              const newSpaces = breakerSpaces(newVoltage);
-              const oldSpaces = breakerSpaces(breaker.voltage);
+              const newSpaces = breakerSpaces(newVoltage, breaker.type);
+              const oldSpaces = breakerSpaces(breaker.voltage, breaker.type);
               let circuitNumber = breaker.circuitNumber;
               if (newSpaces !== oldSpaces) {
                 const baseNum = Number(breaker.circuitNumber.split(',')[0]) || 0;
                 if (baseNum > 0) {
-                  circuitNumber = newSpaces > 1 ? `${baseNum},${baseNum + 2}` : String(baseNum);
+                  if (newSpaces === 3) circuitNumber = `${baseNum},${baseNum + 2},${baseNum + 4}`;
+                  else if (newSpaces === 2) circuitNumber = `${baseNum},${baseNum + 2}`;
+                  else circuitNumber = String(baseNum);
                 }
               }
               onUpdate(panelId, breaker.id, { ...breaker, voltage: newVoltage, circuitNumber });
@@ -657,7 +705,7 @@ function BreakerRow({
             <span className="type-badge type-subpanel">Sub Panel</span>
           ) : isEv ? (
             <span className={`type-badge ${breaker.chargerLevel === 'Level 3' ? 'type-dcfc' : 'type-ev'}`}>
-              {breaker.chargerLevel === 'Level 3' ? 'DCFC' : 'EV'}{evKw > 0 ? ` ${evKw.toFixed(1)}kW` : ''}
+              {breaker.chargerLevel === 'Level 3' ? 'DCFC' : 'EV'}{breaker.chargerOutputKw ? ` ${breaker.chargerOutputKw}kW` : (evKw > 0 ? ` ${evKw.toFixed(1)}kW` : '')}
             </span>
           ) : (
             <span className="type-badge type-load">Load</span>
@@ -707,34 +755,31 @@ function BreakerRow({
             <div className="ev-detail-grid">
               <label>
                 Level
-                <select
-                  value={breaker.chargerLevel || ''}
-                  onChange={(e) => {
-                    const level = e.target.value;
-                    // Auto-set breaker voltage to match level + panel voltage
-                    const autoVolts = level ? String(chargerVoltage(level, serviceVoltage)) : breaker.voltage;
-                    onUpdate(panelId, breaker.id, {
-                      ...breaker,
-                      chargerLevel: level,
-                      voltage: autoVolts,
-                    });
-                  }}
-                >
-                  <option value="">Select...</option>
-                  <option value="Level 1">Level 1 (120V AC)</option>
-                  <option value="Level 2">Level 2 ({serviceVoltage === '120/208V' ? '208V' : '240V'} AC)</option>
-                  <option value="Level 3">Level 3 DCFC (480V)</option>
-                </select>
+                <input
+                  type="text"
+                  value={breaker.chargerLevel || '--'}
+                  readOnly
+                  className="computed-field"
+                />
               </label>
               <label>
                 Charger Amps
-                <input
-                  type="number"
-                  value={breaker.chargerAmps || ''}
-                  onChange={(e) => update('chargerAmps', e.target.value)}
-                  placeholder="e.g. 32"
-                  min="0"
-                />
+                {breaker.chargerProfileId && breaker.chargerLevel === 'Level 3' ? (
+                  <input
+                    type="text"
+                    value={breaker.chargerAmps ? `${breaker.chargerAmps}A` : '--'}
+                    readOnly
+                    className="computed-field"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    value={breaker.chargerAmps || ''}
+                    onChange={(e) => update('chargerAmps', e.target.value)}
+                    placeholder="e.g. 32"
+                    min="0"
+                  />
+                )}
               </label>
               <label>
                 # Ports
@@ -747,7 +792,7 @@ function BreakerRow({
                 />
               </label>
               <label>
-                kW Output
+                kW Input (AC)
                 <input
                   type="text"
                   value={evKw > 0 ? `${evKw.toFixed(1)} kW` : '--'}
@@ -771,16 +816,19 @@ function BreakerRow({
                   onChange={(e) => update('wireSize', e.target.value)}
                 >
                   <option value="">--</option>
-                  <option value="12 AWG">12 AWG</option>
-                  <option value="10 AWG">10 AWG</option>
-                  <option value="8 AWG">8 AWG</option>
-                  <option value="6 AWG">6 AWG</option>
-                  <option value="4 AWG">4 AWG</option>
-                  <option value="3 AWG">3 AWG</option>
-                  <option value="2 AWG">2 AWG</option>
-                  <option value="1 AWG">1 AWG</option>
-                  <option value="1/0 AWG">1/0 AWG</option>
-                  <option value="2/0 AWG">2/0 AWG</option>
+                  {(() => {
+                    const cAmps = Number(breaker.chargerAmps) || 0;
+                    const minWire = breaker.minConductor || (cAmps > 0 ? minWireSizeForAmps(cAmps) : undefined);
+                    const necFloor = minWire ? wireSizeIndex(minWire) : -1;
+                    if (breaker.chargerLevel === 'Level 3') {
+                      const floor = necFloor >= 0 ? necFloor : 6; // default #3 AWG
+                      return WIRE_SIZES.filter((_, i) => i >= floor && i <= 20); // max 2× 250 kcmil per mfr Table 9-13
+                    }
+                    const floor = necFloor >= 0 ? necFloor : 1; // default 12 AWG
+                    return WIRE_SIZES.filter((_, i) => i >= floor && i <= 10);
+                  })().map((w) => (
+                    <option key={w.label} value={w.label}>{w.label}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -808,6 +856,41 @@ function BreakerRow({
                 />
               </label>
             </div>
+            {/* Profile info: rated output, conductor recommendations */}
+            {breaker.chargerOutputKw && (
+              <div className="calc-alert info" style={{ marginTop: '0.4rem' }}>
+                Rated Output: {breaker.chargerOutputKw} kW DC
+              </div>
+            )}
+            {breaker.recommendedBreakerAmps && (
+              <div className="calc-alert info" style={{ marginTop: '0.4rem' }}>
+                NEC min breaker: {nextBreakerSize(minBreakerAmpsForEv(Number(breaker.chargerAmps) || 0))}A
+                {' | '}Recommended: {breaker.recommendedBreakerAmps}A
+              </div>
+            )}
+            {(breaker.minConductor || breaker.recommendedConductor) && (
+              <div className="calc-alert info" style={{ marginTop: '0.4rem' }}>
+                {breaker.minConductor && <>Min conductor: {breaker.minConductor}</>}
+                {breaker.minConductor && breaker.recommendedConductor && ' | '}
+                {breaker.recommendedConductor && <>Recommended: {breaker.recommendedConductor}</>}
+              </div>
+            )}
+            {/* Wire size validation per NEC Table 310.16 */}
+            {(() => {
+              if (!breaker.wireSize) return null;
+              const cAmps = Number(breaker.chargerAmps) || 0;
+              if (cAmps <= 0) return null;
+              const minimum = breaker.minConductor || minWireSizeForAmps(cAmps);
+              if (!minimum) return null;
+              if (isWireUndersized(breaker.wireSize, minimum)) {
+                return (
+                  <div className="calc-alert warning" style={{ marginTop: '0.4rem' }}>
+                    Wire size ({breaker.wireSize}) is undersized. Minimum: {minimum} per NEC Table 310.16 at 75°C Cu.
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {/* NEC 625.40 – 125% continuous load breaker sizing */}
             {(() => {
               const cAmps = Number(breaker.chargerAmps) || 0;
@@ -815,6 +898,18 @@ function BreakerRow({
               if (cAmps <= 0) return null;
               const minAmps = minBreakerAmpsForEv(cAmps);
               const suggested = nextBreakerSize(minAmps);
+              // Skip the NEC info if we already showed profile-based sizing above
+              if (breaker.recommendedBreakerAmps) {
+                // Only show warning if breaker is undersized
+                if (bAmps > 0 && bAmps < minAmps) {
+                  return (
+                    <div className="calc-alert warning" style={{ marginTop: '0.4rem' }}>
+                      NEC 625.40: Breaker ({bAmps}A) must be {'\u2265'} 125% of charger amps ({cAmps}A = {minAmps}A min). Use {suggested}A breaker.
+                    </div>
+                  );
+                }
+                return null;
+              }
               if (bAmps > 0 && bAmps < minAmps) {
                 return (
                   <div className="calc-alert warning" style={{ marginTop: '0.4rem' }}>

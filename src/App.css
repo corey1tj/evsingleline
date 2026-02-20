@@ -489,6 +489,18 @@ legend {
   grid-column: 1 / -1;
 }
 
+/* Charger profile selector */
+.charger-profile-select {
+  padding: 0.3rem 0.5rem;
+  border: 2px solid #059669;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: #f0fdf4;
+  color: #1e293b;
+  min-width: 200px;
+}
+
 /* Amps select in breakers table */
 .amps-select {
   width: 75px !important;

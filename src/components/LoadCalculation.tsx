@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, calcKw, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize, necDemandAmps, evChargerKw } from '../types';
+import { totalSpacesUsed, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize, necDemandAmps, evChargerKw } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -43,10 +43,7 @@ export function LoadCalculation({ data }: Props) {
   const newBreakerAmps = allBreakers.filter((b) => b.condition === 'new').reduce((sum, b) => sum + (Number(b.amps) || 0), 0);
   const hasNewItems = newBreakerAmps > 0 || data.panels.some((p) => p.condition === 'new');
 
-  const totalEvKw = allEvBreakers.reduce((sum, b) => {
-    const v = Number(b.voltage) || 0;
-    return sum + calcKw(String(v), b.chargerAmps || '');
-  }, 0);
+  const totalEvKw = allEvBreakers.reduce((sum, b) => sum + evChargerKw(b), 0);
 
   const capacityUsed = panelRating > 0 ? Math.round((totalLoadAmps / panelRating) * 100) : 0;
 
@@ -230,8 +227,7 @@ export function LoadCalculation({ data }: Props) {
             <div className="calc-detail">
               {allEvBreakers.map((b) => {
                 const panelForBreaker = data.panels.find((p) => p.breakers.some((br) => br.id === b.id));
-                const v = Number(b.voltage) || 0;
-                const kw = calcKw(String(v), b.chargerAmps || '');
+                const kw = evChargerKw(b);
                 const panelName = panelForBreaker?.panelName || '';
                 const ports = Number(b.chargerPorts) || 0;
                 return (

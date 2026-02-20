@@ -6,7 +6,8 @@ import { LoadCalculation } from './components/LoadCalculation';
 import { ExportButton } from './components/ExportButton';
 import { SingleLineDiagram } from './components/SingleLineDiagram';
 import type { SingleLineData, MainPanel, Breaker } from './types';
-import { breakerSpaces, nextCircuitNumber } from './types';
+import { breakerSpaces, nextCircuitNumber, chargerVoltage } from './types';
+import { getProfile } from './chargerProfiles';
 import './App.css';
 
 const STORAGE_KEY = 'evsingleline_data';
@@ -280,20 +281,42 @@ function App() {
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };
 
-  const addEvCharger = (panelId: string) => {
+  const addEvCharger = (panelId: string, profileId?: string) => {
     const panel = data.panels.find((p) => p.id === panelId);
     if (!panel) return;
     const evCount = data.panels.reduce(
       (sum, p) => sum + p.breakers.filter((b) => b.type === 'evcharger').length,
       0
     );
+
+    const profile = profileId && profileId !== 'custom' ? getProfile(profileId) : undefined;
+    const level = profile?.chargerLevel || 'Level 2';
+    const autoVoltage = String(chargerVoltage(level, data.serviceEntrance.serviceVoltage));
+    const spaces = breakerSpaces(autoVoltage, 'evcharger');
+
     const breaker = createBreaker({
-      circuitNumber: nextCircuitNumber(panel.breakers, 2),
-      label: `EV Charger ${evCount + 1}`,
+      circuitNumber: nextCircuitNumber(panel.breakers, spaces),
+      label: profile
+        ? `${profile.name} #${data.panels.reduce(
+            (sum, p) => sum + p.breakers.filter((b) => b.chargerProfileId === profile.id).length, 0
+          ) + 1}`
+        : `EV Charger ${evCount + 1}`,
       type: 'evcharger',
       condition: 'new',
       loadType: 'continuous',  // NEC 625.40
-      chargerLevel: 'Level 2',
+      voltage: autoVoltage,
+      chargerLevel: level,
+      ...(profile && {
+        chargerProfileId: profile.id,
+        chargerAmps: profile.chargerAmps,
+        chargerPorts: profile.chargerPorts,
+        amps: String(profile.recommendedBreaker),
+        chargerOutputKw: profile.outputKw ? String(profile.outputKw) : undefined,
+        recommendedBreakerAmps: String(profile.recommendedBreaker),
+        minConductor: profile.minConductor,
+        recommendedConductor: profile.recommendedConductor,
+        wireSize: profile.recommendedConductor || '',
+      }),
     });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };

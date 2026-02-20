@@ -27,9 +27,14 @@ export interface Breaker {
   loadType: LoadType;    // NEC continuous vs non-continuous classification
   subPanelId?: string;   // links to a MainPanel.id when type==='subpanel'
   // EV charger fields (populated when type === 'evcharger')
+  chargerProfileId?: string;       // selected charger profile ID
   chargerLevel?: string;
   chargerAmps?: string;
-  chargerPorts?: string;  // number of ports / connectors
+  chargerPorts?: string;           // number of ports / connectors
+  chargerOutputKw?: string;        // rated DC output kW (DCFC)
+  recommendedBreakerAmps?: string; // manufacturer recommended breaker
+  minConductor?: string;           // min conductor @ 75°C Cu
+  recommendedConductor?: string;   // recommended conductor @ 75°C Cu
   wireRunFeet?: string;
   wireSize?: string;
   conduitType?: string;
@@ -87,7 +92,9 @@ export interface SingleLineData {
 
 // Helpers
 
-export function breakerSpaces(voltage: string): number {
+export function breakerSpaces(voltage: string, type?: string): number {
+  // Level 3 DCFC: 3-phase 480V requires 3-pole breaker
+  if (type === 'evcharger' && voltage === '480') return 3;
   switch (voltage) {
     case '208':
     case '240':
@@ -122,7 +129,7 @@ export function voltageOptionsForService(serviceVoltage: string): { value: strin
 }
 
 export function totalSpacesUsed(breakers: Breaker[]): number {
-  return breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage), 0);
+  return breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage, b.type), 0);
 }
 
 export function calcKw(voltage: string, amps: string): number {
@@ -145,7 +152,64 @@ export function chargerVoltage(level: string, serviceVoltage: string): number {
 }
 
 /** Standard breaker sizes (amps) */
-export const STANDARD_BREAKER_SIZES = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400];
+export const STANDARD_BREAKER_SIZES = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500];
+
+/** NEC Table 310.16 — Allowable ampacities of insulated conductors, 75°C Cu (THWN-2) */
+export const WIRE_SIZES: { label: string; ampacity: number }[] = [
+  { label: '14 AWG', ampacity: 20 },
+  { label: '12 AWG', ampacity: 25 },
+  { label: '10 AWG', ampacity: 35 },
+  { label: '8 AWG', ampacity: 50 },
+  { label: '6 AWG', ampacity: 65 },
+  { label: '4 AWG', ampacity: 85 },
+  { label: '#3 AWG', ampacity: 100 },
+  { label: '2 AWG', ampacity: 115 },
+  { label: '1 AWG', ampacity: 130 },
+  { label: '1/0 AWG', ampacity: 150 },
+  { label: '2/0 AWG', ampacity: 175 },
+  { label: '3/0 AWG', ampacity: 200 },
+  { label: '4/0 AWG', ampacity: 230 },
+  { label: '250 kcmil', ampacity: 255 },
+  { label: '300 kcmil', ampacity: 285 },
+  { label: '350 kcmil', ampacity: 310 },
+  { label: '400 kcmil', ampacity: 335 },
+  { label: '500 kcmil', ampacity: 380 },
+  { label: '2× 3/0 AWG', ampacity: 400 },
+  { label: '2× 4/0 AWG', ampacity: 460 },
+  { label: '2× 250 kcmil', ampacity: 510 },
+];
+
+/** Find the index of a wire size in the WIRE_SIZES array.
+ *  Handles common label variants (e.g. '3 AWG' matches '#3 AWG'). */
+export function wireSizeIndex(size: string): number {
+  const normalized = size.trim();
+  let idx = WIRE_SIZES.findIndex((w) => w.label === normalized);
+  if (idx >= 0) return idx;
+  // Try with '#' prefix for bare number AWG (e.g. '3 AWG' -> '#3 AWG')
+  if (/^\d+ AWG$/.test(normalized)) {
+    idx = WIRE_SIZES.findIndex((w) => w.label === `#${normalized}`);
+  }
+  // Try without '#' prefix
+  if (idx < 0 && normalized.startsWith('#')) {
+    idx = WIRE_SIZES.findIndex((w) => w.label === normalized.substring(1));
+  }
+  return idx;
+}
+
+/** Minimum wire size for a given charger amps per NEC 625.40 (125% continuous) + Table 310.16 */
+export function minWireSizeForAmps(chargerAmps: number): string | undefined {
+  const required = chargerAmps * 1.25;  // NEC 625.40 continuous load
+  const entry = WIRE_SIZES.find((w) => w.ampacity >= required);
+  return entry?.label;
+}
+
+/** Check if a selected wire size is smaller than the required minimum */
+export function isWireUndersized(selected: string, minimum: string): boolean {
+  const selIdx = wireSizeIndex(selected);
+  const minIdx = wireSizeIndex(minimum);
+  if (selIdx < 0 || minIdx < 0) return false;  // unknown sizes, don't flag
+  return selIdx < minIdx;
+}
 
 /** NEC 625.40 – minimum breaker amps for continuous EV load (125% of charger amps) */
 export function minBreakerAmpsForEv(chargerAmps: number): number {
@@ -174,7 +238,8 @@ export function getOccupiedPositions(breakers: Breaker[]): Set<number> {
 
 /** Calculate the next circuit number for a breaker based on occupied positions.
  *  Standard panel numbering: odd numbers on left, even on right.
- *  For 2-pole breakers, returns "N,N+2" (e.g. "1,3" or "2,4"). */
+ *  For 2-pole breakers, returns "N,N+2" (e.g. "1,3" or "2,4").
+ *  For 3-pole breakers (DCFC), returns "N,N+2,N+4" (e.g. "1,3,5"). */
 export function nextCircuitNumber(breakers: Breaker[], spaces: number): string {
   const occupied = getOccupiedPositions(breakers);
 
@@ -182,6 +247,13 @@ export function nextCircuitNumber(breakers: Breaker[], spaces: number): string {
     let n = 1;
     while (occupied.has(n)) n++;
     return String(n);
+  }
+
+  if (spaces === 3) {
+    // 3-pole: find N where N, N+2, and N+4 are all available
+    let n = 1;
+    while (occupied.has(n) || occupied.has(n + 2) || occupied.has(n + 4)) n++;
+    return `${n},${n + 2},${n + 4}`;
   }
 
   // 2-pole: find N where both N and N+2 are available
@@ -235,11 +307,13 @@ export function breakerKva(b: Breaker): number {
   return (v * a) / 1000;
 }
 
-/** Calculate peak kW for an EV charger breaker using charger output */
+/** Calculate peak kW (AC input) for an EV charger breaker.
+ *  Uses 3-phase formula (V × I × √3) for 480V DCFC chargers. */
 export function evChargerKw(b: Breaker): number {
   const v = Number(b.voltage) || 0;
   const a = Number(b.chargerAmps) || 0;
-  return (v * a) / 1000;
+  const phaseFactor = v === 480 ? Math.sqrt(3) : 1;
+  return (v * a * phaseFactor) / 1000;
 }
 
 /** NEC demand: continuous loads at 125%, non-continuous at 100% */

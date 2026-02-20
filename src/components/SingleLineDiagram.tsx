@@ -1,6 +1,6 @@
 import { useRef, useCallback, type ReactNode } from 'react';
 import type { SingleLineData, MainPanel } from '../types';
-import { calcKw, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { evChargerKw, getEffectivePanelVoltage, transformerFLA } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -291,8 +291,7 @@ export function SingleLineDiagram({ data }: Props) {
               stroke={EV_STROKE} strokeWidth={1} />
           );
 
-          const v = Number(col.b.voltage) || 0;
-          const kw = calcKw(String(v), col.b.chargerAmps || '');
+          const kw = evChargerKw(col.b);
           const isDcfc = col.b.chargerLevel === 'Level 3';
           const evBoxW = isDcfc ? 40 : 32;
 

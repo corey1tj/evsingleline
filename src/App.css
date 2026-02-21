@@ -164,6 +164,19 @@ legend {
   font-weight: 600;
 }
 
+.panel-add-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-highleg {
+  background: #ea580c;
+}
+
+.btn-highleg:hover {
+  background: #c2410c;
+}
+
 .multi-item {
   border-left: 3px solid #2563eb;
 }
@@ -222,6 +235,11 @@ legend {
 .panel-badge-xfmr {
   background: #fef3c7;
   color: #92400e;
+}
+
+.panel-badge-highleg {
+  background: #fed7aa;
+  color: #9a3412;
 }
 
 /* Transformer section */
@@ -681,6 +699,85 @@ legend {
   color: #94a3b8;
   font-size: 0.8rem;
   border-top: 1px solid #e2e8f0;
+}
+
+/* High Leg Delta phase column */
+.phase-cell {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  min-width: 30px;
+}
+
+.phase-col-b {
+  color: #ea580c;
+  background: #fff7ed;
+}
+
+.phase-col-b-error {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+/* NEC caution banner for high leg delta */
+.nec-caution-banner {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+  color: #9a3412;
+  line-height: 1.4;
+}
+
+.nec-caution-banner strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+/* Per-phase loading summary */
+.phase-loading-summary {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.phase-loading-summary .phase-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 500;
+  color: #475569;
+}
+
+.phase-loading-summary .phase-item.phase-b {
+  color: #ea580c;
+  font-weight: 600;
+}
+
+.phase-loading-summary .phase-item .phase-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.phase-loading-summary .phase-item.phase-b .phase-label {
+  color: #ea580c;
+}
+
+.phase-loading-summary .phase-max {
+  font-weight: 600;
+  color: #1e40af;
+  margin-left: auto;
+  align-self: center;
 }
 
 /* Responsive */

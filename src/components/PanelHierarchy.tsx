@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import type { MainPanel, Breaker } from '../types';
+import type { MainPanel, Breaker, PanelType } from '../types';
 import {
   breakerSpaces, totalSpacesUsed, voltageOptionsForService,
   STANDARD_BREAKER_SIZES, STANDARD_KVA_SIZES,
   getEffectivePanelVoltage, stepDownOptions, transformerFLA,
   minBreakerAmpsForEv, nextBreakerSize, breakerKva, evChargerKw, necDemandAmps,
   WIRE_SIZES, wireSizeIndex, minWireSizeForAmps, isWireUndersized,
+  isHighLegDelta, phasesForBreaker, validateBreakerPhase, perPhaseLoading,
 } from '../types';
 import { CHARGER_PROFILES } from '../chargerProfiles';
 
@@ -21,7 +22,7 @@ interface Props {
   onAddEvCharger: (panelId: string, profileId?: string) => void;
   onUpdateBreaker: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemoveBreaker: (panelId: string, breakerId: string) => void;
-  onAddSubPanel: (parentPanelId: string) => void;
+  onAddSubPanel: (parentPanelId: string, panelType?: PanelType) => void;
   depth: number;
 }
 
@@ -193,7 +194,8 @@ export function PanelHierarchy({
   const accountedSpaces = spacesUsed + spareCount;
   const availableSpaces = totalSp - accountedSpaces;
 
-  const voltageOptions = voltageOptionsForService(effectiveVoltage);
+  const isHighLeg = isHighLegDelta(panel);
+  const voltageOptions = voltageOptionsForService(effectiveVoltage, panel.panelType);
 
   const [showChargerPicker, setShowChargerPicker] = useState(false);
 
@@ -257,6 +259,9 @@ export function PanelHierarchy({
           {panel.panelName || `Panel ${index + 1}`}
           {panel.parentPanelId && <span className="panel-badge">Sub Panel</span>}
           {!panel.parentPanelId && depth === 0 && <span className="panel-badge panel-badge-mdp">MDP</span>}
+          {isHighLeg && (
+            <span className="panel-badge panel-badge-highleg">HIGH LEG DELTA</span>
+          )}
           {hasTransformer && (
             <span className="panel-badge panel-badge-xfmr">XFMR {effectiveVoltage}</span>
           )}
@@ -357,6 +362,12 @@ export function PanelHierarchy({
           </div>
         )}
 
+        {isHighLeg && (
+          <div className="calc-alert warning" style={{ marginBottom: '0.75rem' }}>
+            <strong>CAUTION (NEC 408.3(E)):</strong> B Phase has 208V to ground. Orange conductor required per NEC 110.15. No single-pole 120V breakers on B phase positions.
+          </div>
+        )}
+
         <div className="form-grid">
           <label>
             Status
@@ -372,7 +383,7 @@ export function PanelHierarchy({
             Voltage System
             <input
               type="text"
-              value={effectiveVoltage}
+              value={isHighLeg ? '120/240V Delta (3\u03C6)' : effectiveVoltage}
               readOnly
               className="computed-field"
             />
@@ -473,6 +484,7 @@ export function PanelHierarchy({
               <thead>
                 <tr>
                   <th>Ckt #</th>
+                  {isHighLeg && <th>Phase</th>}
                   <th>Label</th>
                   <th>Breaker</th>
                   <th>Voltage</th>
@@ -490,6 +502,7 @@ export function PanelHierarchy({
                     key={breaker.id}
                     breaker={breaker}
                     panelId={panel.id}
+                    panel={panel}
                     voltageOptions={voltageOptions}
                     onUpdate={onUpdateBreaker}
                     onRemove={onRemoveBreaker}
@@ -518,7 +531,7 @@ export function PanelHierarchy({
                 onBlur={() => setShowChargerPicker(false)}
               >
                 <option value="">Select charger model...</option>
-                {(effectiveVoltage === '120/208V' || effectiveVoltage === '120/240V') && (
+                {(effectiveVoltage === '120/208V' || effectiveVoltage === '120/240V' || isHighLeg) && (
                   <optgroup label="Level 2 AC">
                     {CHARGER_PROFILES.filter((p) => p.chargerLevel === 'Level 2').map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
@@ -543,8 +556,11 @@ export function PanelHierarchy({
                 + Add EV Charger
               </button>
             )}
-            <button type="button" className="btn-add btn-small btn-subpanel" onClick={() => onAddSubPanel(panel.id)}>
+            <button type="button" className="btn-add btn-small btn-subpanel" onClick={() => onAddSubPanel(panel.id, 'standard')}>
               + Add Sub Panel
+            </button>
+            <button type="button" className="btn-add btn-small btn-highleg" onClick={() => onAddSubPanel(panel.id, 'highleg')}>
+              + Add HLD Sub Panel
             </button>
           </div>
 
@@ -558,6 +574,25 @@ export function PanelHierarchy({
               {availableSpaces} space{availableSpaces > 1 ? 's' : ''} unaccounted for ({accountedSpaces} of {totalSp} accounted: {spacesUsed} breakers + {spareCount} spare).
             </div>
           )}
+
+          {isHighLeg && panel.breakers.length > 0 && (() => {
+            const phaseLoad = perPhaseLoading(panel.breakers);
+            return (
+              <div className="phase-loading-summary" style={{ marginTop: '0.5rem' }}>
+                <strong>Per-Phase Loading:</strong>{' '}
+                <span>Phase A: {phaseLoad.phaseA}A</span>
+                {' | '}
+                <span className="phase-col-b">Phase B (High Leg): {phaseLoad.phaseB}A</span>
+                {' | '}
+                <span>Phase C: {phaseLoad.phaseC}A</span>
+                {phaseLoad.maxPhase > 0 && (
+                  <span style={{ marginLeft: '0.5rem', fontStyle: 'italic' }}>
+                    (Highest phase: {phaseLoad.maxPhase}A)
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </fieldset>
 
@@ -586,12 +621,14 @@ export function PanelHierarchy({
 function BreakerRow({
   breaker,
   panelId,
+  panel,
   voltageOptions,
   onUpdate,
   onRemove,
 }: {
   breaker: Breaker;
   panelId: string;
+  panel: MainPanel;
   voltageOptions: { value: string; label: string }[];
   onUpdate: (panelId: string, breakerId: string, updated: Breaker) => void;
   onRemove: (panelId: string, breakerId: string) => void;
@@ -603,8 +640,14 @@ function BreakerRow({
   const spaces = breakerSpaces(breaker.voltage, breaker.type);
   const isSubPanel = breaker.type === 'subpanel';
   const isEv = breaker.type === 'evcharger';
+  const isHighLeg = isHighLegDelta(panel);
 
   const evKw = isEv ? evChargerKw(breaker) : 0;
+
+  // Phase info for high leg delta panels
+  const phases = isHighLeg && breaker.circuitNumber ? phasesForBreaker(breaker.circuitNumber) : null;
+  const phaseLabel = phases ? Array.from(phases).sort().join(',') : '';
+  const isBPhase = phases?.has('B') ?? false;
 
   return (
     <>
@@ -618,6 +661,11 @@ function BreakerRow({
             placeholder={spaces > 1 ? '#,#' : '#'}
           />
         </td>
+        {isHighLeg && (
+          <td className={`phase-cell${isBPhase && breaker.voltage === '120' ? ' phase-col-b-error' : isBPhase ? ' phase-col-b' : ''}`}>
+            {phaseLabel || '--'}
+          </td>
+        )}
         <td>
           {isSubPanel ? (
             <span className="subpanel-label">{breaker.label || 'Sub Panel'}</span>
@@ -751,6 +799,7 @@ function BreakerRow({
       {isEv && (
         <tr className="breaker-row-ev-detail">
           <td></td>
+          {isHighLeg && <td></td>}
           <td colSpan={9}>
             <div className="ev-detail-grid">
               <label>
@@ -926,9 +975,39 @@ function BreakerRow({
               }
               return null;
             })()}
+            {/* High leg delta B-phase violation warning */}
+            {(() => {
+              const phaseWarning = validateBreakerPhase(breaker, panel);
+              if (phaseWarning) {
+                return (
+                  <div className="calc-alert warning" style={{ marginTop: '0.4rem' }}>
+                    {phaseWarning}
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </td>
         </tr>
       )}
+      {/* High leg delta B-phase violation warning (non-EV breakers) */}
+      {!isEv && (() => {
+        const phaseWarning = validateBreakerPhase(breaker, panel);
+        if (phaseWarning) {
+          return (
+            <tr>
+              <td></td>
+              {isHighLeg && <td></td>}
+              <td colSpan={9}>
+                <div className="calc-alert warning" style={{ marginTop: '0.2rem', marginBottom: '0.2rem' }}>
+                  {phaseWarning}
+                </div>
+              </td>
+            </tr>
+          );
+        }
+        return null;
+      })()}
     </>
   );
 }

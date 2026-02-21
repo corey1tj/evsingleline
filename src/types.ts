@@ -1,5 +1,6 @@
 export type Condition = 'existing' | 'new';
 export type LoadType = 'continuous' | 'noncontinuous';
+export type PanelType = 'standard' | 'highleg';
 
 export interface ServiceEntrance {
   utilityProvider: string;
@@ -21,7 +22,7 @@ export interface Breaker {
   circuitNumber: string;
   label: string;
   amps: string;
-  voltage: string;       // '120', '208', '240', '277', '480'
+  voltage: string;       // '120', '208', '240', '240-3ph', '277', '480'
   type: 'load' | 'subpanel' | 'evcharger';
   condition: Condition;
   loadType: LoadType;    // NEC continuous vs non-continuous classification
@@ -52,6 +53,7 @@ export interface MainPanel {
   totalSpaces: string;
   spareSpaces: string;       // unused / blank breaker spaces (user-entered)
   condition: Condition;
+  panelType?: PanelType;     // 'standard' (default) or 'highleg' (high leg delta)
   parentPanelId?: string;
   feedBreakerId?: string;
   breakers: Breaker[];
@@ -96,6 +98,8 @@ export function breakerSpaces(voltage: string, type?: string): number {
   // Level 3 DCFC: 3-phase 480V requires 3-pole breaker
   if (type === 'evcharger' && voltage === '480') return 3;
   switch (voltage) {
+    case '240-3ph':
+      return 3;  // 3-pole 240V 3-phase (high leg delta motors)
     case '208':
     case '240':
     case '480':
@@ -107,7 +111,15 @@ export function breakerSpaces(voltage: string, type?: string): number {
   }
 }
 
-export function voltageOptionsForService(serviceVoltage: string): { value: string; label: string }[] {
+export function voltageOptionsForService(serviceVoltage: string, panelType?: PanelType): { value: string; label: string }[] {
+  // High leg delta panels have their own voltage options regardless of service voltage
+  if (panelType === 'highleg') {
+    return [
+      { value: '120', label: '120V (1-pole, A/C only)' },
+      { value: '240', label: '240V (2-pole)' },
+      { value: '240-3ph', label: '240V 3\u03C6 (3-pole)' },
+    ];
+  }
   switch (serviceVoltage) {
     case '120/208V':
       return [
@@ -132,8 +144,14 @@ export function totalSpacesUsed(breakers: Breaker[]): number {
   return breakers.reduce((sum, b) => sum + breakerSpaces(b.voltage, b.type), 0);
 }
 
+/** Extract numeric voltage from a breaker voltage string (handles '240-3ph' → 240) */
+export function numericVoltage(voltage: string): number {
+  if (voltage === '240-3ph') return 240;
+  return Number(voltage) || 0;
+}
+
 export function calcKw(voltage: string, amps: string): number {
-  const v = Number(voltage) || 0;
+  const v = numericVoltage(voltage);
   const a = Number(amps) || 0;
   return (v * a) / 1000;
 }
@@ -239,13 +257,15 @@ export function getOccupiedPositions(breakers: Breaker[]): Set<number> {
 /** Calculate the next circuit number for a breaker based on occupied positions.
  *  Standard panel numbering: odd numbers on left, even on right.
  *  For 2-pole breakers, returns "N,N+2" (e.g. "1,3" or "2,4").
- *  For 3-pole breakers (DCFC), returns "N,N+2,N+4" (e.g. "1,3,5"). */
-export function nextCircuitNumber(breakers: Breaker[], spaces: number): string {
+ *  For 3-pole breakers (DCFC), returns "N,N+2,N+4" (e.g. "1,3,5").
+ *  For high-leg delta panels, 1-pole breakers skip B-phase positions. */
+export function nextCircuitNumber(breakers: Breaker[], spaces: number, panelType?: PanelType): string {
   const occupied = getOccupiedPositions(breakers);
+  const isHighLeg = panelType === 'highleg';
 
   if (spaces === 1) {
     let n = 1;
-    while (occupied.has(n)) n++;
+    while (occupied.has(n) || (isHighLeg && phaseForPosition(n) === 'B')) n++;
     return String(n);
   }
 
@@ -302,17 +322,18 @@ export function getEffectivePanelVoltage(panel: MainPanel, allPanels: MainPanel[
 
 /** Calculate peak kVA for a breaker */
 export function breakerKva(b: Breaker): number {
-  const v = Number(b.voltage) || 0;
+  const v = numericVoltage(b.voltage);
   const a = Number(b.amps) || 0;
-  return (v * a) / 1000;
+  const phaseFactor = b.voltage === '240-3ph' ? Math.sqrt(3) : 1;
+  return (v * a * phaseFactor) / 1000;
 }
 
 /** Calculate peak kW (AC input) for an EV charger breaker.
- *  Uses 3-phase formula (V × I × √3) for 480V DCFC chargers. */
+ *  Uses 3-phase formula (V × I × √3) for 480V DCFC and 240V 3-phase chargers. */
 export function evChargerKw(b: Breaker): number {
-  const v = Number(b.voltage) || 0;
+  const v = numericVoltage(b.voltage);
   const a = Number(b.chargerAmps) || 0;
-  const phaseFactor = v === 480 ? Math.sqrt(3) : 1;
+  const phaseFactor = (v === 480 || b.voltage === '240-3ph') ? Math.sqrt(3) : 1;
   return (v * a * phaseFactor) / 1000;
 }
 
@@ -367,4 +388,139 @@ export function stepDownOptions(parentVoltage: string): { value: string; label: 
     default:
       return [];
   }
+}
+
+// ---- High Leg Delta Utilities ----
+
+/** Whether a panel is a high leg delta panel */
+export function isHighLegDelta(panel: MainPanel): boolean {
+  return panel.panelType === 'highleg';
+}
+
+/** Map a circuit position number to its phase in a 3-phase panel.
+ *  Standard 3-phase bus rotation: positions 1,2 = A; 3,4 = B; 5,6 = C; 7,8 = A; etc. */
+export function phaseForPosition(position: number): 'A' | 'B' | 'C' {
+  const group = Math.floor((position - 1) / 2) % 3;
+  return (['A', 'B', 'C'] as const)[group];
+}
+
+/** Get the set of phases a breaker spans based on its circuit positions */
+export function phasesForBreaker(circuitNumber: string): Set<string> {
+  const positions = circuitNumber.split(',').map(s => Number(s.trim())).filter(n => n > 0);
+  const phases = new Set<string>();
+  for (const pos of positions) {
+    phases.add(phaseForPosition(pos));
+  }
+  return phases;
+}
+
+/** Validate that a breaker is not violating high-leg delta B-phase restrictions.
+ *  Returns a warning string if 120V single-pole breaker is on B phase, null otherwise. */
+export function validateBreakerPhase(breaker: Breaker, panel: MainPanel): string | null {
+  if (panel.panelType !== 'highleg') return null;
+  if (breaker.voltage !== '120') return null;
+  if (!breaker.circuitNumber) return null;
+
+  const phases = phasesForBreaker(breaker.circuitNumber);
+  if (phases.has('B')) {
+    return 'NEC 408.3(E): 120V single-pole breakers cannot be placed on B phase (high leg, 208V to ground). Move to an A or C phase position.';
+  }
+  return null;
+}
+
+/** Per-phase loading for a high leg delta panel */
+export interface PhaseLoading {
+  phaseA: number;
+  phaseB: number;
+  phaseC: number;
+  maxPhase: number;
+}
+
+/** Calculate current on each phase for a set of breakers (high leg delta) */
+export function perPhaseLoading(breakers: Breaker[]): PhaseLoading {
+  let phaseA = 0;
+  let phaseB = 0;
+  let phaseC = 0;
+
+  for (const b of breakers) {
+    if (b.type === 'subpanel') continue;
+    const amps = Number(b.amps) || 0;
+    if (amps === 0) continue;
+
+    const phases = phasesForBreaker(b.circuitNumber);
+
+    if (b.voltage === '120' && phases.size === 1) {
+      if (phases.has('A')) phaseA += amps;
+      else if (phases.has('C')) phaseC += amps;
+      else if (phases.has('B')) phaseB += amps; // violation, but still count
+    } else if ((b.voltage === '240' || b.voltage === '208') && phases.size >= 2) {
+      if (phases.has('A')) phaseA += amps;
+      if (phases.has('B')) phaseB += amps;
+      if (phases.has('C')) phaseC += amps;
+    } else if (b.voltage === '240-3ph') {
+      phaseA += amps;
+      phaseB += amps;
+      phaseC += amps;
+    }
+  }
+
+  return {
+    phaseA,
+    phaseB,
+    phaseC,
+    maxPhase: Math.max(phaseA, phaseB, phaseC),
+  };
+}
+
+/** Per-phase NEC demand calculation for high leg delta panels */
+export interface PhaseNecDemand {
+  phaseA: { continuous: number; nonContinuous: number; totalDemand: number };
+  phaseB: { continuous: number; nonContinuous: number; totalDemand: number };
+  phaseC: { continuous: number; nonContinuous: number; totalDemand: number };
+  maxPhaseDemand: number;
+}
+
+export function necDemandAmpsPerPhase(breakers: Breaker[]): PhaseNecDemand {
+  const phases = { A: { cont: 0, nonCont: 0 }, B: { cont: 0, nonCont: 0 }, C: { cont: 0, nonCont: 0 } };
+
+  for (const b of breakers) {
+    if (b.type === 'subpanel') continue;
+    const amps = Number(b.amps) || 0;
+    if (amps === 0) continue;
+
+    const bPhases = phasesForBreaker(b.circuitNumber);
+    const isCont = b.loadType === 'continuous';
+
+    // For 3-pole breakers, load appears on all three phases
+    if (b.voltage === '240-3ph') {
+      for (const ph of ['A', 'B', 'C'] as const) {
+        if (isCont) phases[ph].cont += amps;
+        else phases[ph].nonCont += amps;
+      }
+      continue;
+    }
+
+    for (const ph of ['A', 'B', 'C'] as const) {
+      if (!bPhases.has(ph)) continue;
+      if (isCont) phases[ph].cont += amps;
+      else phases[ph].nonCont += amps;
+    }
+  }
+
+  const calcDemand = (p: { cont: number; nonCont: number }) => ({
+    continuous: p.cont,
+    nonContinuous: p.nonCont,
+    totalDemand: Math.ceil(p.cont * 1.25) + p.nonCont,
+  });
+
+  const a = calcDemand(phases.A);
+  const b = calcDemand(phases.B);
+  const c = calcDemand(phases.C);
+
+  return {
+    phaseA: a,
+    phaseB: b,
+    phaseC: c,
+    maxPhaseDemand: Math.max(a.totalDemand, b.totalDemand, c.totalDemand),
+  };
 }

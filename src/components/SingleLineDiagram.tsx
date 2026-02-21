@@ -1,6 +1,6 @@
 import { useRef, useCallback, type ReactNode } from 'react';
 import type { SingleLineData, MainPanel } from '../types';
-import { evChargerKw, getEffectivePanelVoltage, transformerFLA } from '../types';
+import { evChargerKw, getEffectivePanelVoltage, transformerFLA, isHighLegDelta } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -183,6 +183,7 @@ export function SingleLineDiagram({ data }: Props) {
         <text x={panelCx} y={curY + 30} textAnchor="middle" fontSize="9" fill="#64748b">
           {[
             isNewPanel ? 'NEW' : '',
+            isHighLegDelta(panel) ? 'HLD' : '',
             panel.mainBreakerAmps ? `${panel.mainBreakerAmps}A` : '',
             panel.totalSpaces ? `${panel.totalSpaces}sp` : '',
             panel.transformer ? effectiveVoltage : '',

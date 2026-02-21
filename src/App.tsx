@@ -5,8 +5,8 @@ import { PanelHierarchy } from './components/PanelHierarchy';
 import { LoadCalculation } from './components/LoadCalculation';
 import { ExportButton } from './components/ExportButton';
 import { SingleLineDiagram } from './components/SingleLineDiagram';
-import type { SingleLineData, MainPanel, Breaker } from './types';
-import { breakerSpaces, nextCircuitNumber, chargerVoltage } from './types';
+import type { SingleLineData, MainPanel, Breaker, PanelType } from './types';
+import { breakerSpaces, nextCircuitNumber, chargerVoltage, getEffectivePanelVoltage } from './types';
 import { getProfile } from './chargerProfiles';
 import './App.css';
 
@@ -194,10 +194,12 @@ function App() {
 
   // ---- Panel CRUD ----
 
-  const addPanel = (parentPanelId?: string) => {
+  const addPanel = (parentPanelId?: string, panelType?: PanelType) => {
+    const namePrefix = panelType === 'highleg' ? 'High Leg Delta ' : '';
     const panel = createPanel({
-      panelName: parentPanelId ? `Sub Panel ${data.panels.length}` : `Panel ${data.panels.length + 1}`,
+      panelName: parentPanelId ? `${namePrefix}Sub Panel ${data.panels.length}` : `${namePrefix}Panel ${data.panels.length + 1}`,
       parentPanelId,
+      panelType: panelType || 'standard',
     });
 
     let updatedPanels = [...data.panels, panel];
@@ -276,7 +278,7 @@ function App() {
     if (!panel) return;
     // Default voltage is 240V (2-pole); use standard panel numbering (N,N+2)
     const defaultSpaces = breakerSpaces('240');
-    const circuitNumber = nextCircuitNumber(panel.breakers, defaultSpaces);
+    const circuitNumber = nextCircuitNumber(panel.breakers, defaultSpaces, panel.panelType);
     const breaker = createBreaker({ circuitNumber });
     updatePanel(panelId, { ...panel, breakers: [...panel.breakers, breaker] });
   };
@@ -291,11 +293,12 @@ function App() {
 
     const profile = profileId && profileId !== 'custom' ? getProfile(profileId) : undefined;
     const level = profile?.chargerLevel || 'Level 2';
-    const autoVoltage = String(chargerVoltage(level, data.serviceEntrance.serviceVoltage));
+    const effectiveVoltage = getEffectivePanelVoltage(panel, data.panels, data.serviceEntrance.serviceVoltage);
+    const autoVoltage = String(chargerVoltage(level, effectiveVoltage));
     const spaces = breakerSpaces(autoVoltage, 'evcharger');
 
     const breaker = createBreaker({
-      circuitNumber: nextCircuitNumber(panel.breakers, spaces),
+      circuitNumber: nextCircuitNumber(panel.breakers, spaces, panel.panelType),
       label: profile
         ? `${profile.name} #${data.panels.reduce(
             (sum, p) => sum + p.breakers.filter((b) => b.chargerProfileId === profile.id).length, 0
@@ -380,9 +383,14 @@ function App() {
         <section className="multi-section">
           <div className="multi-section-header">
             <h2>Panels & Breakers</h2>
-            <button type="button" className="btn-add" onClick={() => addPanel()}>
-              + Add Panel
-            </button>
+            <div className="panel-add-buttons">
+              <button type="button" className="btn-add" onClick={() => addPanel(undefined, 'standard')}>
+                + Add Panel
+              </button>
+              <button type="button" className="btn-add btn-highleg" onClick={() => addPanel(undefined, 'highleg')}>
+                + Add High Leg Delta Panel
+              </button>
+            </div>
           </div>
           {rootPanels.map((panel, idx) => (
             <PanelHierarchy
@@ -398,7 +406,7 @@ function App() {
               onAddEvCharger={addEvCharger}
               onUpdateBreaker={updateBreaker}
               onRemoveBreaker={removeBreaker}
-              onAddSubPanel={(parentId) => addPanel(parentId)}
+              onAddSubPanel={(parentId, panelType) => addPanel(parentId, panelType)}
               depth={0}
             />
           ))}

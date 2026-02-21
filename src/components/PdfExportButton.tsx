@@ -5,6 +5,7 @@ import {
   breakerSpaces, totalSpacesUsed,
   getEffectivePanelVoltage, transformerFLA,
   necDemandAmps, evChargerKw, breakerKva,
+  numericVoltage, isHighLegDelta, necDemandAmpsPerPhase, perPhaseLoading,
 } from '../types';
 
 interface Props {
@@ -158,7 +159,8 @@ export function PdfExportButton({ data }: Props) {
 
       y = checkNewPage(doc, y, 30);
       const condLabel = panel.condition === 'new' ? ' [NEW]' : '';
-      y = addSectionTitle(doc, `${'\u00A0'.repeat(indent * 4)}${label}${isTransformerPanel ? ` [${effectiveVoltage} via Transformer]` : ''}${condLabel}`, y);
+      const hldLabel = isHighLegDelta(panel) ? ' [HIGH LEG DELTA]' : '';
+      y = addSectionTitle(doc, `${'\u00A0'.repeat(indent * 4)}${label}${isTransformerPanel ? ` [${effectiveVoltage} via Transformer]` : ''}${hldLabel}${condLabel}`, y);
 
       // Panel info row
       const infoItems = [
@@ -356,7 +358,7 @@ export function PdfExportButton({ data }: Props) {
     // Peak kW
     const peakKwLoads = allNonSubBreakers
       .filter((b) => b.type !== 'evcharger')
-      .reduce((sum, b) => sum + ((Number(b.voltage) || 0) * (Number(b.amps) || 0)) / 1000, 0);
+      .reduce((sum, b) => sum + ((numericVoltage(b.voltage) || 0) * (Number(b.amps) || 0)) / 1000, 0);
     const peakKwEv = allEvBreakers.reduce((sum, b) => sum + evChargerKw(b), 0);
     const totalPeakKw = peakKwLoads + peakKwEv;
 
@@ -367,6 +369,24 @@ export function PdfExportButton({ data }: Props) {
       loadRows.push(['  EV Chargers (output)', `${peakKwEv.toFixed(1)} kW`]);
     }
     loadRows.push(['Total Peak Demand', `${totalPeakKw.toFixed(1)} kW`]);
+
+    // Per-phase loading for high leg delta panels
+    const highLegPanels = data.panels.filter((p) => isHighLegDelta(p));
+    if (highLegPanels.length > 0) {
+      loadRows.push(['', '']);
+      loadRows.push(['Per-Phase Loading (High Leg Delta)', '']);
+      for (const hlp of highLegPanels) {
+        const phaseNec = necDemandAmpsPerPhase(hlp.breakers);
+        const phaseLoad = perPhaseLoading(hlp.breakers);
+        if (highLegPanels.length > 1) {
+          loadRows.push([`  ${hlp.panelName || 'Panel'}`, '']);
+        }
+        loadRows.push(['  Phase A', `${phaseLoad.phaseA}A / ${phaseNec.phaseA.totalDemand}A NEC`]);
+        loadRows.push(['  Phase B (High Leg)', `${phaseLoad.phaseB}A / ${phaseNec.phaseB.totalDemand}A NEC`]);
+        loadRows.push(['  Phase C', `${phaseLoad.phaseC}A / ${phaseNec.phaseC.totalDemand}A NEC`]);
+        loadRows.push(['Highest Phase Demand', `${phaseNec.maxPhaseDemand}A`]);
+      }
+    }
 
     autoTable(doc, {
       startY: y,
@@ -386,12 +406,12 @@ export function PdfExportButton({ data }: Props) {
         if (!row) return;
         const label = row[0];
         // Bold total/summary rows
-        if (label === 'Total Load' || label === 'NEC Total Demand' || label === 'Total Peak Demand') {
+        if (label === 'Total Load' || label === 'NEC Total Demand' || label === 'Total Peak Demand' || label === 'Highest Phase Demand') {
           hookData.cell.styles.fontStyle = 'bold';
           hookData.cell.styles.fontSize = 10;
         }
         // Bold section headers
-        if (label === 'NEC Demand Calculation' || label === 'Peak kW Demand') {
+        if (label === 'NEC Demand Calculation' || label === 'Peak kW Demand' || label === 'Per-Phase Loading (High Leg Delta)') {
           hookData.cell.styles.fontStyle = 'bold';
           hookData.cell.styles.textColor = [30, 64, 175];
         }

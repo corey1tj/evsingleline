@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { breakerSpaces, totalSpacesUsed, getEffectivePanelVoltage, transformerFLA, necDemandAmps, evChargerKw, breakerKva } from '../types';
+import { breakerSpaces, totalSpacesUsed, getEffectivePanelVoltage, transformerFLA, necDemandAmps, evChargerKw, breakerKva, numericVoltage, isHighLegDelta, necDemandAmpsPerPhase, perPhaseLoading } from '../types';
 import { PdfExportButton } from './PdfExportButton';
 
 interface Props {
@@ -11,8 +11,9 @@ function formatPanel(panel: MainPanel, allPanels: MainPanel[], indent: string, s
   const effectiveVoltage = getEffectivePanelVoltage(panel, allPanels, serviceVoltage);
   const voltageNote = panel.transformer ? ` [${effectiveVoltage} via Transformer]` : '';
   const conditionNote = panel.condition === 'new' ? ' [NEW]' : '';
+  const highLegNote = isHighLegDelta(panel) ? ' [HIGH LEG DELTA]' : '';
 
-  lines.push(`${indent}${label.toUpperCase()}${voltageNote}${conditionNote}`);
+  lines.push(`${indent}${label.toUpperCase()}${voltageNote}${highLegNote}${conditionNote}`);
   lines.push(`${indent}${'-'.repeat(30)}`);
   lines.push(`${indent}Location: ${panel.panelLocation}`);
   lines.push(`${indent}Make/Model: ${panel.panelMake} ${panel.panelModel}`);
@@ -107,7 +108,7 @@ function formatData(data: SingleLineData): string {
   const allEv = allBreakers.filter((b) => b.type === 'evcharger');
   const peakKwLoads = allBreakers
     .filter((b) => b.type !== 'evcharger')
-    .reduce((sum, b) => sum + ((Number(b.voltage) || 0) * (Number(b.amps) || 0)) / 1000, 0);
+    .reduce((sum, b) => sum + (numericVoltage(b.voltage) * (Number(b.amps) || 0)) / 1000, 0);
   const peakKwEv = allEv.reduce((sum, b) => sum + evChargerKw(b), 0);
 
   lines.push('NEC DEMAND CALCULATION');
@@ -124,6 +125,25 @@ function formatData(data: SingleLineData): string {
   }
   lines.push(`Total Peak Demand: ${(peakKwLoads + peakKwEv).toFixed(1)} kW`);
   lines.push('');
+
+  // High Leg Delta per-phase loading
+  const highLegPanels = data.panels.filter((p) => isHighLegDelta(p));
+  if (highLegPanels.length > 0) {
+    lines.push('PER-PHASE LOADING (HIGH LEG DELTA)');
+    lines.push('-'.repeat(30));
+    for (const hlp of highLegPanels) {
+      const phaseNec = necDemandAmpsPerPhase(hlp.breakers);
+      const phaseLoad = perPhaseLoading(hlp.breakers);
+      if (highLegPanels.length > 1) {
+        lines.push(`  ${hlp.panelName || 'Panel'}:`);
+      }
+      lines.push(`  Phase A: ${phaseLoad.phaseA}A load / ${phaseNec.phaseA.totalDemand}A NEC demand`);
+      lines.push(`  Phase B (High Leg): ${phaseLoad.phaseB}A load / ${phaseNec.phaseB.totalDemand}A NEC demand`);
+      lines.push(`  Phase C: ${phaseLoad.phaseC}A load / ${phaseNec.phaseC.totalDemand}A NEC demand`);
+      lines.push(`  Highest Phase Demand: ${phaseNec.maxPhaseDemand}A`);
+    }
+    lines.push('');
+  }
 
   return lines.join('\n');
 }

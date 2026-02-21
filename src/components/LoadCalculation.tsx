@@ -1,5 +1,5 @@
 import type { SingleLineData, MainPanel } from '../types';
-import { totalSpacesUsed, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize, necDemandAmps, evChargerKw } from '../types';
+import { totalSpacesUsed, getEffectivePanelVoltage, transformerFLA, minBreakerAmpsForEv, nextBreakerSize, necDemandAmps, evChargerKw, numericVoltage, isHighLegDelta, necDemandAmpsPerPhase, perPhaseLoading } from '../types';
 
 interface Props {
   data: SingleLineData;
@@ -94,7 +94,7 @@ export function LoadCalculation({ data }: Props) {
   // Peak kW: for EV chargers use charger output, for other loads use breaker rating
   const peakKwLoads = allNonSubBreakers.reduce((sum, b) => {
     if (b.type === 'evcharger') return sum; // counted separately
-    const v = Number(b.voltage) || 0;
+    const v = numericVoltage(b.voltage);
     const a = Number(b.amps) || 0;
     return sum + (v * a) / 1000;
   }, 0);
@@ -107,12 +107,16 @@ export function LoadCalculation({ data }: Props) {
     const pkw = p.breakers.reduce((sum, b) => {
       if (b.type === 'subpanel') return sum;
       if (b.type === 'evcharger') return sum + evChargerKw(b);
-      const v = Number(b.voltage) || 0;
+      const v = numericVoltage(b.voltage);
       const a = Number(b.amps) || 0;
       return sum + (v * a) / 1000;
     }, 0);
     return { panel: p, ...demand, peakKw: pkw };
   });
+
+  // High leg delta panels - per-phase demand
+  const highLegPanels = data.panels.filter((p) => isHighLegDelta(p));
+  const hasHighLeg = highLegPanels.length > 0;
 
   // Sub-panel alignment warnings
   const alignmentWarnings: string[] = [];
@@ -319,11 +323,51 @@ export function LoadCalculation({ data }: Props) {
           <div className="calc-detail">
             {panelNecDemands.map((pd) => (
               <div key={pd.panel.id} className="calc-row sub">
-                <span>{pd.panel.panelName || 'Panel'}</span>
+                <span>{pd.panel.panelName || 'Panel'}{isHighLegDelta(pd.panel) ? ' (HLD)' : ''}</span>
                 <span>{pd.continuous}A cont + {pd.nonContinuous}A non-cont = {pd.totalDemand}A demand</span>
               </div>
             ))}
           </div>
+        )}
+
+        {hasHighLeg && (
+          <>
+            <hr />
+            <div className="calc-row" style={{ fontWeight: 600 }}>
+              <span>Per-Phase NEC Demand (High Leg Delta)</span>
+              <span></span>
+            </div>
+            {highLegPanels.map((hlp) => {
+              const phaseNec = necDemandAmpsPerPhase(hlp.breakers);
+              const phaseLoad = perPhaseLoading(hlp.breakers);
+              return (
+                <div key={hlp.id} className="calc-detail">
+                  {highLegPanels.length > 1 && (
+                    <div className="calc-row sub" style={{ fontWeight: 600 }}>
+                      <span>{hlp.panelName || 'Panel'}</span>
+                      <span></span>
+                    </div>
+                  )}
+                  <div className="calc-row sub">
+                    <span>Phase A</span>
+                    <span>{phaseNec.phaseA.continuous}A cont + {phaseNec.phaseA.nonContinuous}A non-cont = {phaseNec.phaseA.totalDemand}A demand ({phaseLoad.phaseA}A load)</span>
+                  </div>
+                  <div className="calc-row sub phase-col-b">
+                    <span>Phase B (High Leg)</span>
+                    <span>{phaseNec.phaseB.continuous}A cont + {phaseNec.phaseB.nonContinuous}A non-cont = {phaseNec.phaseB.totalDemand}A demand ({phaseLoad.phaseB}A load)</span>
+                  </div>
+                  <div className="calc-row sub">
+                    <span>Phase C</span>
+                    <span>{phaseNec.phaseC.continuous}A cont + {phaseNec.phaseC.nonContinuous}A non-cont = {phaseNec.phaseC.totalDemand}A demand ({phaseLoad.phaseC}A load)</span>
+                  </div>
+                  <div className={`calc-row total ${Number(hlp.mainBreakerAmps) > 0 && phaseNec.maxPhaseDemand > Number(hlp.mainBreakerAmps) ? 'warning' : ''}`}>
+                    <span>Highest Phase Demand</span>
+                    <span>{phaseNec.maxPhaseDemand}A</span>
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
 
         <hr />
